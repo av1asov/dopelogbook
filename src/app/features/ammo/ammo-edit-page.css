@@ -30,7 +30,7 @@
 .unit {
   flex: none;
   width: 44px;
-  height: 42px;
+  height: 44px;
   border: 1.5px solid var(--ink);
   border-radius: 4px;
   background: transparent;

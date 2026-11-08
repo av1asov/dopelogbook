@@ -36,7 +36,7 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
     .sign {
       flex: none;
       width: 34px;
-      height: 42px;
+      height: 44px;
       padding: 0;
       border: 1.5px solid var(--ink);
       border-radius: 4px;
@@ -47,7 +47,7 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
     }
 
     input {
-      height: 42px;
+      height: 44px;
       padding: 0 6px;
       font-size: 18px;
       font-weight: 700;

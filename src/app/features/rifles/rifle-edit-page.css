@@ -5,7 +5,7 @@
 }
 
 .add-row .btn {
-  min-height: 42px;
+  min-height: 44px;
 }
 
 .device {
@@ -19,9 +19,11 @@
   font-size: 15px;
 }
 
+/* A 44 pt target inside the 36 pt chip. */
 .device button {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  margin: -4px 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -61,7 +63,7 @@
 
 .velocity {
   width: 74px;
-  height: 38px;
+  height: 44px;
   padding: 0 8px;
   background: var(--paper);
 }

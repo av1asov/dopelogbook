@@ -134,6 +134,11 @@
   box-sizing: border-box;
 }
 
+/* Quick taps on ± must not trigger double-tap zoom; pinch zoom stays available. */
+* {
+  touch-action: manipulation;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;

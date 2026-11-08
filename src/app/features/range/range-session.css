@@ -122,6 +122,11 @@
   gap: 8px;
 }
 
+.three .field {
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .block {
   display: flex;
   flex-direction: column;
@@ -160,9 +165,18 @@
   font-weight: 800;
 }
 
+/* Same line height as .label, so both stepper columns start level. */
 .sub {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: 11px;
+}
+
+.label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .strong-input {
@@ -175,7 +189,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 32px;
+  min-height: 44px;
   font-size: 15px;
   font-weight: 600;
 }

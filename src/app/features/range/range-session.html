@@ -45,7 +45,10 @@
         </app-stepper>
       </div>
       <div class="block">
-        <span class="label">Верт., {{ units() }}</span>
+        <div class="label-row">
+          <span class="label">Верт., {{ units() }}</span>
+          <span class="sub">{{ clicksText() }}</span>
+        </div>
         <app-stepper
           minusLabel="Меньше на щелчок"
           plusLabel="Больше на щелчок"
@@ -57,7 +60,6 @@
             formControlName="elev"
             aria-label="Вертикальная поправка"
           />
-          <span class="sub">{{ clicksText() }}</span>
         </app-stepper>
       </div>
       <label class="field">
