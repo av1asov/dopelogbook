@@ -143,18 +143,23 @@
             Дист., м
             <input class="num" inputmode="numeric" formControlName="dist" />
           </label>
-          <label class="field">
+          <div class="field">
             Верт., {{ units() }}
-            <input class="num" inputmode="decimal" formControlName="elev" />
-          </label>
+            <app-signed-input label="Вертикальная поправка" formControlName="elev" />
+          </div>
           <label class="field">
             Ветер, м/с
             <input class="num" inputmode="decimal" formControlName="windSpeed" />
           </label>
-          <label class="field">
+          <div class="field">
             Гориз., {{ units() }}
-            <input class="num" inputmode="decimal" formControlName="windCorr" />
-          </label>
+            <app-signed-input
+              label="Горизонтальная поправка"
+              plus="→"
+              minus="←"
+              formControlName="windCorr"
+            />
+          </div>
           <label class="field">
             Попаданий
             <input class="num" inputmode="numeric" formControlName="hits" />

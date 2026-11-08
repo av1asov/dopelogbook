@@ -21,6 +21,7 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
       inputmode="decimal"
       autocomplete="off"
       [attr.aria-label]="label()"
+      [attr.placeholder]="placeholder()"
       [value]="text()"
       (input)="edit($event)"
       (blur)="onTouched()"
@@ -62,6 +63,7 @@ export class SignedInput implements ControlValueAccessor {
   readonly label = input.required<string>();
   readonly plus = input('+');
   readonly minus = input('−');
+  readonly placeholder = input<string | null>(null);
 
   protected readonly negative = signal(false);
   protected readonly text = signal('');

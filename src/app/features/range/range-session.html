@@ -41,69 +41,98 @@
           plusLabel="Больше на 25 м"
           (step)="stepDist($event)"
         >
-          <input class="big" inputmode="numeric" formControlName="dist" aria-label="Дистанция, м" />
+          <label class="tap">
+            <input
+              class="big"
+              inputmode="numeric"
+              formControlName="dist"
+              aria-label="Дистанция, м"
+            />
+          </label>
         </app-stepper>
       </div>
       <div class="block">
-        <div class="label-row">
-          <span class="label">Верт., {{ units() }}</span>
-          <span class="sub">{{ clicksText() }}</span>
-        </div>
+        <span class="label">Верт., {{ units() }}</span>
         <app-stepper
           minusLabel="Меньше на щелчок"
           plusLabel="Больше на щелчок"
           (step)="stepElev($event)"
         >
-          <input
-            class="big"
-            inputmode="decimal"
-            formControlName="elev"
-            aria-label="Вертикальная поправка"
-          />
+          <label class="tap">
+            <input
+              class="big"
+              inputmode="decimal"
+              formControlName="elev"
+              aria-label="Вертикальная поправка"
+            />
+            <span class="sub">{{ clicksText() }}</span>
+          </label>
         </app-stepper>
       </div>
-      <label class="field">
-        Ветер, м/с
-        <input class="num strong-input" inputmode="decimal" formControlName="windSpeed" />
-      </label>
-      <label class="field">
-        Гориз., {{ units() }}
-        <input class="num strong-input" inputmode="decimal" formControlName="windCorr" />
-      </label>
+      <div class="block">
+        <span class="label">Ветер, м/с</span>
+        <app-stepper
+          minusLabel="Ветер слабее на 1 м/с"
+          plusLabel="Ветер сильнее на 1 м/с"
+          (step)="stepWindSpeed($event)"
+        >
+          <label class="tap">
+            <input
+              class="big"
+              inputmode="decimal"
+              formControlName="windSpeed"
+              aria-label="Скорость ветра, м/с"
+            />
+            <span class="sub">боковой</span>
+          </label>
+        </app-stepper>
+      </div>
+      <div class="block">
+        <span class="label">Гориз., {{ units() }}</span>
+        <app-stepper
+          minusLabel="Щелчок влево"
+          plusLabel="Щелчок вправо"
+          (step)="stepWindCorr($event)"
+        >
+          <label class="tap">
+            <input
+              class="big"
+              inputmode="decimal"
+              autocomplete="off"
+              aria-label="Горизонтальная поправка"
+              [value]="windCorrText()"
+              (input)="editWindCorr($event)"
+            />
+            <span class="sub">{{ windCorrSide() }}</span>
+          </label>
+        </app-stepper>
+      </div>
     </div>
   </section>
 
   @if (isFirst()) {
-    <section class="panel cold">
+    <section class="panel cold" aria-label="Первый выстрел из холодного ствола">
       <label class="cold-toggle">
         <input type="checkbox" formControlName="cold" />
-        Первый выстрел — из холодного ствола
+        1-й холодный
       </label>
       @if (form.controls.cold.value) {
-        <div class="two">
-          <div class="field">
-            Он лёг, верт., мм
-            <app-signed-input
-              label="Холодный выстрел по вертикали"
-              plus="↑"
-              minus="↓"
-              formControlName="coldUp"
-            />
-          </div>
-          <div class="field">
-            Он лёг, гориз., мм
-            <app-signed-input
-              label="Холодный выстрел по горизонтали"
-              plus="→"
-              minus="←"
-              formControlName="coldRight"
-            />
-          </div>
+        <div class="cold-fields">
+          <app-signed-input
+            label="Холодный выстрел по вертикали, мм"
+            plus="↑"
+            minus="↓"
+            placeholder="мм"
+            formControlName="coldUp"
+          />
+          <app-signed-input
+            label="Холодный выстрел по горизонтали, мм"
+            plus="→"
+            minus="←"
+            placeholder="мм"
+            formControlName="coldRight"
+          />
         </div>
-        <span class="pen-note">
-          Только в первой серии дня. Этот выстрел не входит в группу серии и в карту, его смещение
-          копится в статистике.
-        </span>
       }
     </section>
   }
@@ -111,23 +140,45 @@
   <section class="panel">
     <div class="two">
       <div class="block">
-        <span class="label">Попаданий</span>
-        <app-stepper
-          minusLabel="Меньше попаданий"
-          plusLabel="Больше попаданий"
-          (step)="stepHits($event)"
-        >
-          <span class="big-text">{{ form.controls.hits.value }}</span>
-        </app-stepper>
-      </div>
-      <div class="block">
         <span class="label">Выстрелов</span>
         <app-stepper
           minusLabel="Меньше выстрелов"
           plusLabel="Больше выстрелов"
           (step)="stepShots($event)"
         >
-          <span class="big-text">{{ form.controls.shots.value }}</span>
+          <label class="tap">
+            <input
+              class="big"
+              inputmode="numeric"
+              autocomplete="off"
+              aria-label="Выстрелов"
+              [value]="form.controls.shots.value"
+              (change)="typeShots($event)"
+            />
+            @if (form.controls.cold.value) {
+              <span class="sub">с холод.</span>
+            }
+          </label>
+        </app-stepper>
+      </div>
+      <div class="block">
+        <span class="label">Попаданий</span>
+        <app-stepper
+          minusLabel="Меньше попаданий"
+          plusLabel="Больше попаданий"
+          (step)="stepHits($event)"
+        >
+          <label class="tap">
+            <input
+              class="big"
+              inputmode="numeric"
+              autocomplete="off"
+              aria-label="Попаданий"
+              [value]="form.controls.hits.value"
+              (change)="typeHits($event)"
+            />
+            <span class="sub">{{ hitsCaption() }}</span>
+          </label>
         </app-stepper>
       </div>
     </div>

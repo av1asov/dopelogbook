@@ -26,6 +26,7 @@ import {
   numText,
   offText,
   parseNum,
+  plural,
   rifleById,
   Series,
   SeriesDefaults,
@@ -49,6 +50,7 @@ const count = (value: number) => new FormControl(value, { nonNullable: true });
 const flag = () => new FormControl(false, { nonNullable: true });
 
 const DIST_STEP = 25;
+const WIND_STEP = 1;
 
 interface RangeDraft {
   sessionId: string;
@@ -142,6 +144,23 @@ export class RangeSession implements OnInit {
     return elev == null ? '' : `${Math.round(elev / this.click())} щелч.`;
   });
 
+  /** The side a typed number goes to. It outlasts an empty field, since the keypad has no minus. */
+  private windCorrLeft = false;
+
+  protected readonly windCorrText = computed(() => this.value().windCorr.replace(/-/g, ''));
+
+  protected readonly windCorrSide = computed(() => {
+    const corr = parseNum(this.value().windCorr);
+    if (!corr) return '0 щелч.';
+    return corr < 0 ? '← влево' : 'вправо →';
+  });
+
+  protected readonly hitsCaption = computed(() => {
+    const { hits, shots } = this.value();
+    const missed = shots - hits;
+    return missed ? `${missed} ${plural(missed, 'промах', 'промаха', 'промахов')}` : 'все';
+  });
+
   protected readonly cardHint = computed(() => {
     const diary = this.store.diary();
     const s = this.session();
@@ -204,6 +223,13 @@ export class RangeSession implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
+    this.form.controls.windCorr.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((value) => {
+        const corr = parseNum(value);
+        if (corr) this.windCorrLeft = corr < 0;
+      });
+
     const draft = await this.settings.readSetting<RangeDraft>('rangeDraft');
     if (draft?.sessionId === this.session().id) {
       this.form.patchValue(draft.value);
@@ -234,15 +260,52 @@ export class RangeSession implements OnInit {
     this.form.controls.elev.setValue(fmt(Number(elev.toFixed(4)), this.digits()));
   }
 
+  protected stepWindSpeed(direction: number): void {
+    const speed = (parseNum(this.form.controls.windSpeed.value) ?? 0) + direction * WIND_STEP;
+    this.form.controls.windSpeed.setValue(numText(Math.max(0, speed)));
+  }
+
+  protected stepWindCorr(direction: number): void {
+    const corr = (parseNum(this.form.controls.windCorr.value) ?? 0) + direction * this.click();
+    this.form.controls.windCorr.setValue(fmt(Number(corr.toFixed(4)), this.digits()));
+  }
+
+  protected editWindCorr(event: Event): void {
+    const typed = (event.target as HTMLInputElement).value.replace(/-/g, '');
+    this.form.controls.windCorr.setValue(typed && this.windCorrLeft ? `-${typed}` : typed);
+  }
+
   protected stepHits(direction: number): void {
+    this.setHits(this.form.controls.hits.value + direction);
+  }
+
+  protected stepShots(direction: number): void {
+    this.setShots(this.form.controls.shots.value + direction);
+  }
+
+  protected typeHits(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const typed = parseNum(input.value);
+    if (typed != null) this.setHits(Math.round(typed));
+    input.value = String(this.form.controls.hits.value);
+  }
+
+  protected typeShots(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const typed = parseNum(input.value);
+    if (typed != null) this.setShots(Math.round(typed));
+    input.value = String(this.form.controls.shots.value);
+  }
+
+  private setHits(value: number): void {
     const { hits, shots } = this.form.controls;
-    hits.setValue(Math.min(shots.value, Math.max(0, hits.value + direction)));
+    hits.setValue(Math.min(shots.value, Math.max(0, value)));
   }
 
   /** Hits follow the shots while every shot is a hit. */
-  protected stepShots(direction: number): void {
+  private setShots(value: number): void {
     const { hits, shots } = this.form.controls;
-    const next = Math.max(1, shots.value + direction);
+    const next = Math.max(1, value);
     const allHit = hits.value === shots.value;
     shots.setValue(next);
     hits.setValue(allHit ? next : Math.min(hits.value, next));
