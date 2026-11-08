@@ -1,3 +1,4 @@
+@import './ui.css';
 @import '@fontsource/tektur/cyrillic-700.css';
 @import '@fontsource/tektur/latin-700.css';
 @import '@fontsource/tektur/cyrillic-800.css';
@@ -84,7 +85,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
     --paper: #141815;
     --sheet: #1c211d;
@@ -104,6 +105,27 @@
     --grid: #2b322d;
     --axis: #48514a;
   }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #141815;
+  --sheet: #1c211d;
+  --ink: #e3e7df;
+  --ink-2: #9aa59c;
+  --rule: #333b35;
+  --pen: #8fb0e8;
+  --mark: #e8bb12;
+  --mark-ink: #141815;
+  --ok: #6cc185;
+  --warn: #e19a4e;
+  --bad: #ef7d74;
+  --c1: #3987e5;
+  --c2: #d95926;
+  --c3: #199e70;
+  --c0: #6b746c;
+  --grid: #2b322d;
+  --axis: #48514a;
 }
 
 *,

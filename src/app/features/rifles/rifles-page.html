@@ -1,0 +1,71 @@
+<div class="screen">
+  <div class="top-row">
+    <a routerLink="/more" class="back">‹ Ещё</a>
+    <a routerLink="/more/rifles/new" class="btn-mark add">+ Винтовка</a>
+  </div>
+  <h1 class="screen-title">Винтовки</h1>
+
+  @for (card of cards(); track card.rifle.id) {
+    <a class="card" [routerLink]="['/more/rifles', card.rifle.id]">
+      <span class="title-row">
+        <span class="card-title">{{ card.rifle.name }}</span>
+        <span class="muted arrow">›</span>
+      </span>
+      <span class="facts">
+        <span class="muted">Калибр</span><span>{{ card.rifle.caliber || '—' }}</span>
+        <span class="muted">Прицел</span><span>{{ card.scope }}</span>
+        @if (card.rifle.barrel) {
+          <span class="muted">Ствол</span><span>{{ card.rifle.barrel }}</span>
+        }
+        @if (card.rifle.devices?.length) {
+          <span class="muted">Дульные</span><span>{{ card.rifle.devices?.join(', ') }}</span>
+        }
+        <span class="muted">Ноль</span>
+        <span>
+          @if (card.zero; as zero) {
+            <b>{{ zero.dist }}</b> {{ zero.rest }}
+          } @else {
+            не отмечен
+          }
+        </span>
+      </span>
+      @if (card.combos.length) {
+        <span class="combos">
+          <span class="combo head">
+            <span>патрон</span><span class="right">V₀</span><span class="right">на нуле</span>
+            <span class="right">кучн.</span>
+          </span>
+          @for (combo of card.combos; track combo.ammoId) {
+            <span class="combo num">
+              <span class="name">{{ combo.name }}</span>
+              <span class="right">{{ combo.velocity }}</span>
+              <span class="right">{{ combo.atZero }}</span>
+              <span class="right">{{ combo.group }}</span>
+            </span>
+          }
+        </span>
+      } @else {
+        <span class="hint">Патроны не привязаны.</span>
+      }
+      <span class="rounds">
+        <b class="num">{{ card.rounds }}</b>
+        <span class="muted">выстрелов по журналу · {{ card.sessionsText }}</span>
+      </span>
+    </a>
+  } @empty {
+    <div class="card">
+      <b>Винтовок нет</b>
+      <span class="hint">
+        Заведите винтовку: калибр, прицел, цена щелчка. Затем привяжите патроны, которыми из неё
+        стреляете.
+      </span>
+    </div>
+  }
+
+  @if (cards().length) {
+    <p class="hint">
+      «На нуле» — поправка патрона на дистанции пристрелки, выводится из журнала. Кучность в
+      {{ settings.groupUnit() }}, только со стола, сошек и мешка.
+    </p>
+  }
+</div>

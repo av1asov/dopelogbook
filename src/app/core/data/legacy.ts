@@ -13,7 +13,7 @@ export interface LegacyResult {
 
 const stamp = (created: unknown): string => new Date(Number(created) || 0).toISOString();
 
-const compact = <T extends object>(value: T): T =>
+export const compact = <T extends object>(value: T): T =>
   Object.fromEntries(
     Object.entries(value).filter(([, v]) => v !== null && v !== undefined && v !== ''),
   ) as T;

@@ -37,6 +37,10 @@
   border-top: 1.5px solid var(--ink);
 }
 
+.tabs[hidden] {
+  display: none;
+}
+
 .tabs a {
   display: flex;
   flex-direction: column;

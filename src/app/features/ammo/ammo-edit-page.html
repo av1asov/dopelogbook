@@ -1,0 +1,108 @@
+<header class="edit-header">
+  <a [routerLink]="rifle() ? ['/more/rifles', rifle()] : ['/more/ammo']">Отмена</a>
+  <b>Патрон</b>
+  <button type="submit" form="ammo-form">Готово</button>
+</header>
+
+<form id="ammo-form" class="screen" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
+
+  <span class="seg">
+    <button
+      type="button"
+      [attr.aria-pressed]="type() === 'factory'"
+      (click)="form.controls.type.setValue('factory')"
+    >
+      Заводской
+    </button>
+    <button
+      type="button"
+      [attr.aria-pressed]="type() === 'handload'"
+      (click)="form.controls.type.setValue('handload')"
+    >
+      Самосборный
+    </button>
+  </span>
+
+  <div class="form-grid">
+    <label class="field wide">
+      Название
+      <input
+        formControlName="name"
+        [placeholder]="type() === 'factory' ? 'если пусто — производитель и серия' : ''"
+      />
+    </label>
+    <label class="field">Калибр<input formControlName="caliber" placeholder=".308 Win" /></label>
+    @if (type() === 'handload') {
+      <label class="field">
+        Длина патрона, мм
+        <input class="num" formControlName="coal" inputmode="decimal" />
+      </label>
+    } @else {
+      <label class="field">Партия<input formControlName="lot" placeholder="с коробки" /></label>
+      <label class="field">Производитель<input formControlName="maker" /></label>
+      <label class="field">Серия<input formControlName="line" /></label>
+    }
+    <label class="field wide">Пуля<input formControlName="bullet" /></label>
+  </div>
+
+  @if (type() === 'handload') {
+    <section class="recipe">
+      <h2 class="section-title pen">Рецепт</h2>
+      <div class="recipe-grid">
+        <label class="field paper">Порох<input formControlName="powder" /></label>
+        <div class="field paper">
+          Навеска
+          <span class="charge">
+            <input
+              class="input num"
+              formControlName="charge"
+              inputmode="decimal"
+              aria-label="Навеска"
+            />
+            <button
+              type="button"
+              class="unit"
+              aria-label="Единица навески"
+              (click)="toggleChargeUnit()"
+            >
+              {{ form.controls.chargeUnit.value }}
+            </button>
+          </span>
+        </div>
+        <label class="field paper">Гильза<input formControlName="brass" /></label>
+        <label class="field paper">Капсюль<input formControlName="primer" /></label>
+      </div>
+    </section>
+  }
+
+  @if (offerVariant()) {
+    <div class="notice">
+      По этому патрону уже {{ seriesText() }}. Меняете рецепт — сохраните как вариант, чтобы старые
+      данные не смешались с новыми.
+    </div>
+    <button type="button" class="btn-mark" (click)="saveAsVariant()">Сохранить как вариант</button>
+  }
+
+  <label class="field">Заметки<textarea formControlName="notes"></textarea></label>
+
+  @if (id()) {
+    @if (sessionCount()) {
+      <span class="hint">Удалить нельзя: патрон есть в записях ({{ sessionCount() }}).</span>
+    } @else if (confirmingDelete()) {
+      <div class="notice confirm">
+        <span>Удалить патрон?</span>
+        <div class="btn-row">
+          <button type="button" class="btn danger" (click)="remove()">Удалить</button>
+          <button type="button" class="btn" (click)="confirmingDelete.set(false)">Отмена</button>
+        </div>
+      </div>
+    } @else {
+      <button type="button" class="link-btn danger" (click)="confirmingDelete.set(true)">
+        Удалить патрон
+      </button>
+    }
+  }
+</form>

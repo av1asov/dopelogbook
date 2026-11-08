@@ -1,0 +1,131 @@
+<div class="screen">
+  <h1 class="screen-title">Ещё</h1>
+
+  <section class="list">
+    <a routerLink="/more/rifles" class="row">
+      <span class="grow">Винтовки</span>
+      <span class="num muted">{{ store.rifles().length }}</span>
+      <span class="muted">›</span>
+    </a>
+    <a routerLink="/more/ammo" class="row">
+      <span class="grow">Патроны</span>
+      <span class="num muted">{{ store.ammo().length }}</span>
+      <span class="muted">›</span>
+    </a>
+  </section>
+
+  <section class="list">
+    <div class="row">
+      <span class="grow">Кучность в</span>
+      <span class="seg unit">
+        <button
+          type="button"
+          [attr.aria-pressed]="settings.groupUnit() === 'MOA'"
+          (click)="settings.setGroupUnit('MOA')"
+        >
+          MOA
+        </button>
+        <button
+          type="button"
+          [attr.aria-pressed]="settings.groupUnit() === 'MIL'"
+          (click)="settings.setGroupUnit('MIL')"
+        >
+          MIL
+        </button>
+      </span>
+    </div>
+    <button type="button" class="row" (click)="cycleTheme()">
+      <span class="grow">Тема</span>
+      <span class="muted">{{ themeName() }} ›</span>
+    </button>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Резервная копия</h2>
+    <div class="card" [class.overdue]="backupOverdue()">
+      <span class="backup-text">
+        <b>{{ backupAge() }}</b> Данные живут только на этом iPhone: если удалить иконку, они
+        удалятся вместе с ней.
+      </span>
+      <div class="btn-row">
+        <button type="button" class="btn-mark" [disabled]="busy()" (click)="exportBackup()">
+          Экспорт в Файлы
+        </button>
+        <label class="btn" [class.disabled]="busy()">
+          Импорт
+          <input type="file" accept=".json,application/json" hidden (change)="chooseFile($event)" />
+        </label>
+      </div>
+      <span class="hint">Один файл .json с записями и фото. Сохраните его в iCloud Drive.</span>
+
+      @if (pendingFile(); as file) {
+        <button type="button" class="btn" (click)="savePending()">Сохранить {{ file.name }}</button>
+      }
+      @if (busy(); as text) {
+        <span class="hint">{{ text }}</span>
+      }
+      @if (message(); as text) {
+        <span class="done">{{ text }}</span>
+      }
+      @if (error(); as text) {
+        <p class="error">{{ text }}</p>
+      }
+    </div>
+
+    @if (preview(); as p) {
+      <div class="card">
+        <b>В файле {{ p.fileName }}</b>
+        <span>{{ summaryText(p.summary) }}</span>
+        @if (p.warnings.extraColdSeries) {
+          <div class="notice">
+            Записей с лишними холодными сериями: {{ p.warnings.extraColdSeries }}. Холодным
+            считается только первый выстрел дня, остальные серии останутся вне карты.
+          </div>
+        }
+        @if (p.warnings.missingPhotos) {
+          <div class="notice">
+            Фото отсутствует или повреждено: {{ p.warnings.missingPhotos }}. Записи импортируются
+            без них.
+          </div>
+        }
+        @if (replaceWarning(); as warning) {
+          <span class="hint"
+            >{{ warning }} «Заменить всё» удалит их, «Добавить» объединит с файлом.</span
+          >
+        }
+        <div class="btn-row">
+          <button
+            type="button"
+            class="btn-mark"
+            [disabled]="busy()"
+            (click)="applyImport('replace')"
+          >
+            Заменить всё
+          </button>
+          <button type="button" class="btn" [disabled]="busy()" (click)="applyImport('add')">
+            Добавить
+          </button>
+        </div>
+        <button type="button" class="link-btn" (click)="preview.set(null)">Отмена</button>
+      </div>
+    }
+  </section>
+
+  <section class="about">
+    <h2 class="section-title">О приложении</h2>
+    <span>DOPE · версия {{ version }} · работает без сети</span>
+    <span>
+      Хранилище: {{ store.persisted() ? 'постоянное' : 'обычное' }}
+      @if (usedMb() != null) {
+        · занято {{ usedMb() }} МБ
+      }
+    </span>
+    @if (update.ready()) {
+      <button type="button" class="link-btn" (click)="update.restart()">
+        Обновление: готово — перезапустить
+      </button>
+    } @else {
+      <span>Обновление: последняя версия</span>
+    }
+  </section>
+</div>

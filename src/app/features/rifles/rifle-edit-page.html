@@ -1,0 +1,171 @@
+<header class="edit-header">
+  <a routerLink="/more/rifles">Отмена</a>
+  <b>Винтовка</b>
+  <button type="submit" form="rifle-form">Готово</button>
+</header>
+
+<form id="rifle-form" class="screen" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
+
+  <div class="form-grid">
+    <label class="field wide">Название<input formControlName="name" /></label>
+    <label class="field">Калибр<input formControlName="caliber" placeholder=".308 Win" /></label>
+    <label class="field">Ствол<input formControlName="barrel" placeholder="длина, твист" /></label>
+    <label class="field wide">Прицел<input formControlName="scope" /></label>
+    <div class="field">
+      Единицы
+      <span class="seg">
+        <button
+          type="button"
+          [attr.aria-pressed]="form.controls.units.value === 'MIL'"
+          (click)="form.controls.units.setValue('MIL')"
+        >
+          MIL
+        </button>
+        <button
+          type="button"
+          [attr.aria-pressed]="form.controls.units.value === 'MOA'"
+          (click)="form.controls.units.setValue('MOA')"
+        >
+          MOA
+        </button>
+      </span>
+    </div>
+    <div class="field">
+      Щелчок · выс. прицела
+      <span class="pair">
+        <input
+          class="input num"
+          formControlName="click"
+          inputmode="decimal"
+          aria-label="Цена щелчка"
+        />
+        <input
+          class="input num"
+          formControlName="sightHeight"
+          inputmode="decimal"
+          placeholder="мм"
+          aria-label="Высота прицела, мм"
+        />
+      </span>
+    </div>
+  </div>
+
+  <section class="section">
+    <h2 class="section-title">Дульные устройства</h2>
+    <div class="chips">
+      @for (device of devices(); track device) {
+        <span class="device">
+          {{ device }}
+          <button
+            type="button"
+            [attr.aria-label]="'Убрать ' + device"
+            (click)="removeDevice(device)"
+          >
+            ✕
+          </button>
+        </span>
+      }
+      @if (!addingDevice()) {
+        <button type="button" class="chip dashed" (click)="addingDevice.set(true)">
+          + Добавить
+        </button>
+      }
+    </div>
+    @if (addingDevice()) {
+      <div class="add-row">
+        <input
+          class="input"
+          [formControl]="newDevice"
+          placeholder="ДТК, глушитель"
+          aria-label="Название устройства"
+          (keydown.enter)="$event.preventDefault(); commitDevice()"
+        />
+        <button type="button" class="btn" (click)="commitDevice()">OK</button>
+      </div>
+    }
+  </section>
+
+  <section class="section" formArrayName="combos">
+    <h2 class="section-title">Патроны из этой винтовки</h2>
+    <div class="combo-list">
+      @for (combo of form.controls.combos.controls; track combo; let i = $index) {
+        <div class="combo-row" [formGroupName]="i">
+          <span class="grow">{{ ammoLabel(combo.controls.ammoId.value) }}</span>
+          <span class="v0">V₀</span>
+          <input
+            class="input num velocity"
+            formControlName="velocity"
+            inputmode="decimal"
+            placeholder="м/с"
+            [attr.aria-label]="'Скорость: ' + ammoLabel(combo.controls.ammoId.value)"
+          />
+          @if (seriesSessions(combo.controls.ammoId.value); as count) {
+            <span class="locked">{{ count }} зап.</span>
+          } @else {
+            <button
+              type="button"
+              class="remove"
+              [attr.aria-label]="'Отвязать ' + ammoLabel(combo.controls.ammoId.value)"
+              (click)="removeCombo(i)"
+            >
+              ✕
+            </button>
+          }
+        </div>
+      }
+      <button type="button" class="link-btn bind" (click)="pickingAmmo.set(!pickingAmmo())">
+        + Привязать патрон
+      </button>
+      @if (pickingAmmo()) {
+        <div class="picker">
+          @for (ammo of freeAmmo(); track ammo.id) {
+            <button type="button" class="chip" (click)="addCombo(ammo.id)">
+              {{ ammoName(ammo) }}
+            </button>
+          }
+          <button type="button" class="chip dashed" (click)="createAmmo()">+ Новый патрон</button>
+        </div>
+      }
+    </div>
+    <span class="hint"
+      >Скорость — из этого ствола: один патрон из разных винтовок летит по-разному.</span
+    >
+  </section>
+
+  <label class="field">Заметки<textarea formControlName="notes"></textarea></label>
+
+  @if (id()) {
+    <section class="section zero">
+      <h2 class="section-title">Пристрелка</h2>
+      @for (entry of zeroHistory(); track entry.id) {
+        <span
+          ><b>{{ entry.dist }} м</b> под {{ entry.ammo }} — {{ entry.date }}</span
+        >
+      }
+      <span class="hint">Ноль отмечается в записи стрельбы, здесь — только история.</span>
+    </section>
+
+    @if (confirmingDelete()) {
+      <div class="notice confirm">
+        <span>
+          Удалить винтовку
+          @if (sessionCount()) {
+            вместе с записями ({{ sessionCount() }})
+          }
+          ?
+        </span>
+        <div class="btn-row">
+          <button type="button" class="btn danger" (click)="remove()">Удалить</button>
+          <button type="button" class="btn" (click)="confirmingDelete.set(false)">Отмена</button>
+        </div>
+      </div>
+    } @else {
+      <button type="button" class="link-btn danger" (click)="confirmingDelete.set(true)">
+        Удалить винтовку
+      </button>
+    }
+  }
+</form>

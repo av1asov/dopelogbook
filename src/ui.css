@@ -1,0 +1,316 @@
+/* Building blocks shared by the screens. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 16px 20px;
+}
+
+.screen-title {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 1.1;
+}
+
+.top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--pen);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.section-title {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  color: inherit;
+  text-decoration: none;
+}
+
+.card-title {
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 21px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.num {
+  font-family: var(--f-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--ink-2);
+}
+
+.notice {
+  padding: 10px 12px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--warn);
+  font-size: 14px;
+}
+
+.error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 14px;
+}
+
+.badge {
+  padding: 0 6px;
+  border: 1.5px solid var(--ink-2);
+  border-radius: 3px;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.badge.hand {
+  border-color: var(--pen);
+  color: var(--pen);
+}
+
+/* Buttons */
+
+.btn,
+.btn-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.btn-mark {
+  background: var(--mark);
+  border-color: var(--mark-ink);
+  color: var(--mark-ink);
+}
+
+.btn:disabled,
+.btn-mark:disabled {
+  opacity: 0.5;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-row > * {
+  flex: 1;
+}
+
+.btn-small {
+  position: relative;
+  align-self: flex-start;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.link-btn {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pen);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.link-btn.danger {
+  color: var(--bad);
+}
+
+.chip {
+  position: relative;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--sheet);
+}
+
+/* Small controls keep their drawn size but get a 44 pt touch target. */
+.chip::after,
+.btn-small::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 6px;
+}
+
+.seg {
+  display: flex;
+  overflow: hidden;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+}
+
+.seg button {
+  flex: 1;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.seg button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--sheet);
+}
+
+/* Forms */
+
+.edit-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--sheet);
+  border-bottom: 1px solid var(--rule);
+}
+
+.edit-header b {
+  font-size: 17px;
+}
+
+.edit-header a,
+.edit-header button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pen);
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.edit-header button[type='submit'] {
+  font-weight: 700;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.field input,
+.field textarea,
+.field select,
+.input {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 10px;
+  border: 1px solid var(--rule);
+  border-bottom: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.field textarea {
+  height: 72px;
+  padding: 8px 10px;
+  resize: none;
+}
+
+.field input.num,
+.input.num {
+  font-family: var(--f-num);
+}

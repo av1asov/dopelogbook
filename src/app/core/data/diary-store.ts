@@ -1,8 +1,10 @@
-import { inject, Injectable, signal } from '@angular/core';
-import { Diary } from '../ballistics/model';
-import { DiaryRepository } from './repository';
+import { computed, inject, Injectable, signal } from '@angular/core';
+import { Diary, Doc } from '../ballistics/model';
+import { Snapshot } from './db';
+import { DocByKind, DocInput, DiaryRepository, DocKind, RestoreMode } from './repository';
 
 const EMPTY: Diary = { rifles: [], ammo: [], sessions: [] };
+const byCreation = (a: Doc, b: Doc) => a.createdAt.localeCompare(b.createdAt);
 
 /** The diary as signals for the screens. Reads and writes go through the repository. */
 @Injectable({ providedIn: 'root' })
@@ -13,6 +15,9 @@ export class DiaryStore {
   readonly ready = signal(false);
   readonly loadFailed = signal(false);
   readonly persisted = signal(false);
+
+  readonly rifles = computed(() => [...this.diary().rifles].sort(byCreation));
+  readonly ammo = computed(() => [...this.diary().ammo].sort(byCreation));
 
   async init(): Promise<void> {
     void this.requestPersistence();
@@ -27,6 +32,53 @@ export class DiaryStore {
 
   async reload(): Promise<void> {
     this.diary.set(await this.repository.diary());
+  }
+
+  async save<K extends DocKind>(kind: K, doc: DocInput<K>): Promise<DocByKind[K]> {
+    const saved = await this.repository.put(kind, doc);
+    await this.reload();
+    return saved;
+  }
+
+  async remove(kind: DocKind, id: string): Promise<void> {
+    await this.repository.delete(kind, id);
+    await this.reload();
+  }
+
+  /** A rifle goes together with its sessions. */
+  async removeRifle(id: string): Promise<void> {
+    const sessions = this.diary().sessions.filter((s) => s.rifleId === id);
+    for (const session of sessions) await this.repository.delete('session', session.id);
+    await this.remove('rifle', id);
+  }
+
+  /** Removes the ammo and unlinks it from the rifles. */
+  async removeAmmo(id: string): Promise<void> {
+    for (const rifle of this.diary().rifles) {
+      if (!rifle.combos.some((c) => c.ammoId === id)) continue;
+      await this.repository.put('rifle', {
+        ...rifle,
+        combos: rifle.combos.filter((c) => c.ammoId !== id),
+      });
+    }
+    await this.remove('ammo', id);
+  }
+
+  addPhoto(blob: Blob): Promise<string> {
+    return this.repository.putPhoto(blob);
+  }
+
+  removePhoto(id: string): Promise<void> {
+    return this.repository.deletePhoto(id);
+  }
+
+  snapshot(): Promise<Snapshot> {
+    return this.repository.snapshot();
+  }
+
+  async restore(snapshot: Snapshot, mode: RestoreMode): Promise<void> {
+    await this.repository.restore(snapshot, mode);
+    await this.reload();
   }
 
   private async requestPersistence(): Promise<void> {

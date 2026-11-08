@@ -1,0 +1,76 @@
+<div class="backdrop" (click)="closed.emit()"></div>
+<section
+  class="sheet"
+  role="dialog"
+  [attr.aria-label]="'Патрон, устройство и положение для серии ' + seriesNumber()"
+  [formGroup]="form()"
+>
+  <span class="handle"></span>
+  <div class="head">
+    <h2>Серия {{ seriesNumber() }}</h2>
+    <span class="hint">меняется только эта и следующие</span>
+  </div>
+
+  <div class="group">
+    <span class="section-title">Патрон</span>
+    @for (ammo of ammoList(); track ammo.id) {
+      <label class="option" [class.selected]="form().controls.ammoId.value === ammo.id">
+        <input type="radio" formControlName="ammoId" [value]="ammo.id" />
+        <span class="grow">{{ name(ammo) }}</span>
+        <span class="kind" [class.hand]="ammo.type === 'handload'">
+          {{ ammo.type === 'handload' ? 'самосбор' : 'завод' }}
+        </span>
+      </label>
+    }
+  </div>
+
+  <div class="group">
+    <span class="section-title">Дульное устройство</span>
+    <div class="seg">
+      @for (device of devices(); track device) {
+        <button
+          type="button"
+          [attr.aria-pressed]="form().controls.device.value === device"
+          (click)="form().controls.device.setValue(device)"
+        >
+          {{ device || 'без' }}
+        </button>
+      }
+    </div>
+  </div>
+
+  <div class="group">
+    <span class="section-title">Положение</span>
+    <div class="grid">
+      @for (item of positions; track item[0]) {
+        <button
+          type="button"
+          class="choice"
+          [attr.aria-pressed]="form().controls.pos.value === item[0]"
+          (click)="toggle(form().controls.pos, item[0])"
+        >
+          {{ item[1] }}
+        </button>
+      }
+    </div>
+  </div>
+
+  <div class="group">
+    <span class="section-title">Опора</span>
+    <div class="grid">
+      @for (item of rests; track item[0]) {
+        <button
+          type="button"
+          class="choice"
+          [class.span]="item[0] === 'none'"
+          [attr.aria-pressed]="form().controls.rest.value === item[0]"
+          (click)="toggle(form().controls.rest, item[0])"
+        >
+          {{ item[0] === 'bag' ? 'мешок' : item[1] }}
+        </button>
+      }
+    </div>
+  </div>
+
+  <button type="button" class="btn-mark done" (click)="closed.emit()">Готово</button>
+</section>

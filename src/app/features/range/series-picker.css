@@ -1,0 +1,126 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgb(0 0 0 / 55%);
+}
+
+.sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 12px);
+  padding: 8px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  background: var(--sheet);
+  border-radius: 16px 16px 0 0;
+}
+
+.handle {
+  align-self: center;
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--rule);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.head h2 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1.5px solid var(--rule);
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.option.selected {
+  border: 2px solid var(--ink);
+}
+
+.option input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.kind {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.kind.hand {
+  color: var(--pen);
+}
+
+.seg button {
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.seg button[aria-pressed='true'] {
+  font-weight: 700;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.choice {
+  min-height: 44px;
+  padding: 0 2px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.choice[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--sheet);
+  font-weight: 700;
+}
+
+.choice.span {
+  grid-column: span 2;
+}
+
+.done {
+  flex: none;
+  min-height: 52px;
+  font-size: 17px;
+}

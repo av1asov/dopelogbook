@@ -1,0 +1,43 @@
+.add {
+  min-height: 40px;
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.arrow {
+  font-size: 18px;
+}
+
+.recipe {
+  padding: 5px 8px;
+  background: var(--paper);
+  border-left: 3px solid var(--pen);
+  font-size: 14px;
+}
+
+.details,
+.usage {
+  font-size: 14px;
+}
+
+.copy {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

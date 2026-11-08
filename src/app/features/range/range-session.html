@@ -1,0 +1,244 @@
+<header class="range-header">
+  <div class="record">
+    <span class="conditions">{{ conditions() }}</span>
+    <span class="rifle-name">{{ rifle().name }}</span>
+  </div>
+  <span class="saved">
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      <circle cx="5" cy="5" r="4" />
+    </svg>
+    {{ online() ? 'В сети' : 'Без сети' }} · сохранено
+  </span>
+</header>
+
+<form class="range" [formGroup]="form" (ngSubmit)="saveSeries()" novalidate>
+  <div class="series-head">
+    <span class="series-title">Серия {{ seriesNumber() }}</span>
+    @if (cardHint(); as hint) {
+      <span class="muted card-hint">
+        {{ hint.label }} <b class="num">{{ hint.value }}</b>
+      </span>
+    }
+  </div>
+
+  <section class="panel">
+    <div class="picks">
+      <button type="button" class="pick strong" (click)="pickerOpen.set(true)">
+        {{ ammoLabel() }}
+      </button>
+      <button type="button" class="pick" (click)="pickerOpen.set(true)">{{ deviceLabel() }}</button>
+      <button type="button" class="pick" (click)="pickerOpen.set(true)">{{ stanceLabel() }}</button>
+      @if (sourceNote(); as note) {
+        <span class="hint">{{ note }}</span>
+      }
+    </div>
+
+    <div class="two">
+      <div class="block">
+        <span class="label">Дистанция, м</span>
+        <app-stepper
+          minusLabel="Меньше на 25 м"
+          plusLabel="Больше на 25 м"
+          (step)="stepDist($event)"
+        >
+          <input class="big" inputmode="numeric" formControlName="dist" aria-label="Дистанция, м" />
+        </app-stepper>
+      </div>
+      <div class="block">
+        <span class="label">Верт., {{ units() }}</span>
+        <app-stepper
+          minusLabel="Меньше на щелчок"
+          plusLabel="Больше на щелчок"
+          (step)="stepElev($event)"
+        >
+          <input
+            class="big"
+            inputmode="decimal"
+            formControlName="elev"
+            aria-label="Вертикальная поправка"
+          />
+          <span class="sub">{{ clicksText() }}</span>
+        </app-stepper>
+      </div>
+      <label class="field">
+        Ветер, м/с
+        <input class="num strong-input" inputmode="decimal" formControlName="windSpeed" />
+      </label>
+      <label class="field">
+        Гориз., {{ units() }}
+        <input class="num strong-input" inputmode="decimal" formControlName="windCorr" />
+      </label>
+    </div>
+  </section>
+
+  @if (isFirst()) {
+    <section class="panel cold">
+      <label class="cold-toggle">
+        <input type="checkbox" formControlName="cold" />
+        Первый выстрел — из холодного ствола
+      </label>
+      @if (form.controls.cold.value) {
+        <div class="two">
+          <div class="field">
+            Он лёг, верт., мм
+            <app-signed-input
+              label="Холодный выстрел по вертикали"
+              plus="↑"
+              minus="↓"
+              formControlName="coldUp"
+            />
+          </div>
+          <div class="field">
+            Он лёг, гориз., мм
+            <app-signed-input
+              label="Холодный выстрел по горизонтали"
+              plus="→"
+              minus="←"
+              formControlName="coldRight"
+            />
+          </div>
+        </div>
+        <span class="pen-note">
+          Только в первой серии дня. Этот выстрел не входит в группу серии и в карту, его смещение
+          копится в статистике.
+        </span>
+      }
+    </section>
+  }
+
+  <section class="panel">
+    <div class="two">
+      <div class="block">
+        <span class="label">Попаданий</span>
+        <app-stepper
+          minusLabel="Меньше попаданий"
+          plusLabel="Больше попаданий"
+          (step)="stepHits($event)"
+        >
+          <span class="big-text">{{ form.controls.hits.value }}</span>
+        </app-stepper>
+      </div>
+      <div class="block">
+        <span class="label">Выстрелов</span>
+        <app-stepper
+          minusLabel="Меньше выстрелов"
+          plusLabel="Больше выстрелов"
+          (step)="stepShots($event)"
+        >
+          <span class="big-text">{{ form.controls.shots.value }}</span>
+        </app-stepper>
+      </div>
+    </div>
+
+    <div class="three">
+      <label class="field">
+        Группа, мм
+        <input class="num strong-input" inputmode="decimal" formControlName="group" />
+      </label>
+      <div class="field">
+        СТП верт., мм
+        <app-signed-input label="СТП по вертикали" plus="↑" minus="↓" formControlName="offUp" />
+      </div>
+      <div class="field">
+        СТП гориз., мм
+        <app-signed-input
+          label="СТП по горизонтали"
+          plus="→"
+          minus="←"
+          formControlName="offRight"
+        />
+      </div>
+    </div>
+
+    <span class="pen-note">
+      @for (part of resultHint().parts; track part) {
+        {{ part }} ·
+      }
+      @if (resultHint().card; as card) {
+        в карту пойдёт <b class="num">{{ card }}</b>
+      } @else {
+        в карту не пойдёт: {{ resultHint().why }}
+      }
+    </span>
+
+    <div class="btn-row">
+      <button
+        type="button"
+        class="mini"
+        [class.on]="form.controls.skip.value"
+        (click)="form.controls.skip.setValue(!form.controls.skip.value)"
+      >
+        Не учитывать
+      </button>
+      <label class="mini photo" [class.on]="photos().length">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+          <circle cx="12" cy="13" r="3.5" />
+        </svg>
+        {{ photoBusy() ? 'Сохраняю…' : 'Фото мишени' }}
+        @if (photos().length) {
+          ({{ photos().length }})
+        }
+        <input type="file" accept="image/*" hidden (change)="addPhoto($event)" />
+      </label>
+    </div>
+    @if (form.controls.skip.value) {
+      <label class="field">
+        Почему не учитывать
+        <input formControlName="skipReason" placeholder="флаер, эксперимент, сбит ноль" />
+      </label>
+    }
+  </section>
+
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
+
+  <button class="btn-mark save" type="submit">Сохранить и следующая серия</button>
+
+  @if (today().length) {
+    <div class="today">
+      <span class="label">Сегодня</span>
+      @for (row of today(); track row.n) {
+        <div class="today-row num">
+          <span class="muted">{{ row.n }}</span>
+          <span>{{ row.dist }}</span>
+          <span>{{ row.elev }}</span>
+          <span>{{ row.hits }}</span>
+          @if (row.group) {
+            <span class="muted">{{ row.group }}</span>
+          }
+          @if (row.cold) {
+            <span class="pen">{{ row.cold }}</span>
+          }
+          @if (row.out) {
+            <span class="out">{{ row.out }}</span>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  @if (confirmingFinish()) {
+    <div class="notice confirm">
+      <span>Завершить стрельбу? Незаписанная серия пропадёт.</span>
+      <div class="btn-row">
+        <button type="button" class="btn" (click)="finish()">Завершить</button>
+        <button type="button" class="btn" (click)="confirmingFinish.set(false)">Отмена</button>
+      </div>
+    </div>
+  } @else {
+    <button type="button" class="link-btn" (click)="confirmingFinish.set(true)">
+      Завершить стрельбу
+    </button>
+  }
+</form>
+
+@if (pickerOpen()) {
+  <app-series-picker
+    [form]="picks"
+    [rifle]="rifle()"
+    [seriesNumber]="seriesNumber()"
+    (closed)="pickerOpen.set(false)"
+  />
+}

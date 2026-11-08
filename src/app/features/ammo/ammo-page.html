@@ -1,0 +1,54 @@
+<div class="screen">
+  <div class="top-row">
+    <a routerLink="/more" class="back">‹ Ещё</a>
+    <a routerLink="/more/ammo/new" class="btn-mark add">+ Патрон</a>
+  </div>
+  <h1 class="screen-title">Патроны</h1>
+
+  @for (card of cards(); track card.ammo.id) {
+    <article class="card">
+      <a class="title-row" [routerLink]="['/more/ammo', card.ammo.id]">
+        <span class="name">{{ card.name }}</span>
+        <span class="badge" [class.hand]="card.handload">{{
+          card.handload ? 'самосбор' : 'завод'
+        }}</span>
+        <span class="muted arrow">›</span>
+      </a>
+      @if (card.recipe; as recipe) {
+        <span class="recipe num">{{ recipe }}</span>
+      }
+      <span class="details muted">{{ card.details }}</span>
+      @for (use of card.usage; track use.rifleId) {
+        <span class="usage">
+          {{ use.rifle }}
+          @if (use.velocity; as velocity) {
+            · {{ velocity }}
+          }
+          @if (use.group; as group) {
+            · кучн. <b class="num">{{ group }}</b> · {{ use.groups }}
+          }
+          · {{ use.rounds }}
+        </span>
+      } @empty {
+        <span class="hint">Не привязан ни к одной винтовке.</span>
+      }
+      <a class="btn-small copy" routerLink="/more/ammo/new" [queryParams]="{ from: card.ammo.id }">
+        {{ card.handload ? 'Сделать вариант' : 'Новая партия' }}
+      </a>
+    </article>
+  } @empty {
+    <div class="card">
+      <b>Патронов нет</b>
+      <span class="hint">
+        Заводской патрон описывается производителем, серией и партией, самосборный — рецептом.
+      </span>
+    </div>
+  }
+
+  @if (cards().length) {
+    <p class="hint">
+      Изменили навеску или компонент — «Сделать вариант»: старые записи останутся за прежним
+      рецептом.
+    </p>
+  }
+</div>

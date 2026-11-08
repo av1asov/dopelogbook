@@ -1,0 +1,65 @@
+.add {
+  min-height: 40px;
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+.title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.arrow {
+  font-size: 18px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 14px;
+  font-size: 14px;
+}
+
+.combos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+.combo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px 54px 62px;
+  gap: 6px;
+}
+
+.combo.head {
+  color: var(--ink-2);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.name {
+  font-family: var(--f-body);
+}
+
+.right {
+  text-align: right;
+}
+
+.rounds {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+.rounds b {
+  font-size: 22px;
+}

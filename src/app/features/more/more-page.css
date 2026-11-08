@@ -1,0 +1,64 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 17px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.row + .row {
+  border-top: 1px solid var(--rule);
+}
+
+.grow {
+  flex: 1;
+}
+
+.seg.unit button {
+  min-height: 36px;
+  font-size: 15px;
+}
+
+.overdue {
+  border-left: 4px solid var(--warn);
+}
+
+.backup-text {
+  font-size: 15px;
+}
+
+.backup-text b {
+  font-weight: 600;
+}
+
+.btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.done {
+  color: var(--ok);
+  font-size: 14px;
+}
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ink-2);
+  font-size: 14px;
+}

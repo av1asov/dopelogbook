@@ -1,0 +1,81 @@
+<form class="screen" [formGroup]="form" (ngSubmit)="start()" novalidate>
+  <div>
+    <span class="hint">Открытой стрельбы нет</span>
+    <h1 class="screen-title">Новая стрельба</h1>
+  </div>
+
+  <section class="section">
+    <h2 class="section-title">Винтовка</h2>
+    @for (item of store.rifles(); track item.id) {
+      <label class="rifle" [class.selected]="item.id === rifle()?.id">
+        <input type="radio" formControlName="rifleId" [value]="item.id" />
+        <span class="rifle-text">
+          <b>{{ item.name }}</b>
+          <span class="muted">{{ zeroText(item) }}</span>
+        </span>
+      </label>
+    }
+  </section>
+
+  @if (rifle(); as current) {
+    @if (!current.combos.length) {
+      <div class="notice">
+        К этой винтовке не привязан ни один патрон.
+        <a [routerLink]="['/more/rifles', current.id]">Привязать</a>
+      </div>
+    }
+  }
+
+  <div class="date-place">
+    <label class="field">Дата<input class="num" type="date" formControlName="date" /></label>
+    <label class="field">Место<input formControlName="place" (change)="fillAltitude()" /></label>
+  </div>
+  @if (places().length) {
+    <div class="chips recent">
+      <span class="hint">Недавние:</span>
+      @for (place of places(); track place) {
+        <button
+          type="button"
+          class="chip"
+          [attr.aria-pressed]="place === currentPlace()"
+          (click)="choosePlace(place)"
+        >
+          {{ place }}
+        </button>
+      }
+    </div>
+  }
+
+  <section class="section">
+    <h2 class="section-title">Погода</h2>
+    <div class="weather">
+      <div class="field plain">
+        t, °C
+        <app-signed-input label="Температура" formControlName="temp" />
+      </div>
+      <label class="field plain">
+        давл., мм рт. ст.
+        <input class="num" inputmode="decimal" formControlName="pressure" />
+      </label>
+      <label class="field plain">
+        высота, м
+        <input class="num" inputmode="decimal" formControlName="altitude" />
+      </label>
+    </div>
+    <span class="hint">
+      Без сети погода вводится вручную. Высота подставляется из прошлой стрельбы на этом месте.
+    </span>
+  </section>
+
+  <label class="zero">
+    <input type="checkbox" formControlName="rezero" />
+    <span>
+      Сегодня выставляю ноль
+      <span class="hint block">можно отметить и позже, в записи</span>
+    </span>
+  </label>
+
+  <button class="btn-mark go" type="submit" [disabled]="!rifle()?.combos?.length || busy()">
+    На рубеж
+  </button>
+</form>
