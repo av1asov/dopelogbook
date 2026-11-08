@@ -1,0 +1,1390 @@
+{
+ "zero": {
+  "dist": 100,
+  "date": "2026-09-14",
+  "ammo": "hand",
+  "derived": false
+ },
+ "cards": {
+  "hand/step25": {
+   "sessions": 3,
+   "temps": [
+    18,
+    9,
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 0
+    },
+    {
+     "d": 125,
+     "e": 0.175,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 2
+    },
+    {
+     "d": 150,
+     "e": 0.35,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 3
+    },
+    {
+     "d": 175,
+     "e": 0.525,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 5
+    },
+    {
+     "d": 200,
+     "e": 0.7,
+     "exact": true,
+     "w": 0.15,
+     "wExact": true,
+     "clicks": 7
+    },
+    {
+     "d": 225,
+     "e": 1.025,
+     "exact": false,
+     "w": 0.154166667,
+     "wExact": false,
+     "clicks": 10
+    },
+    {
+     "d": 250,
+     "e": 1.35,
+     "exact": false,
+     "w": 0.158333333,
+     "wExact": false,
+     "clicks": 14
+    },
+    {
+     "d": 275,
+     "e": 1.675,
+     "exact": false,
+     "w": 0.1625,
+     "wExact": false,
+     "clicks": 17
+    },
+    {
+     "d": 300,
+     "e": 2,
+     "exact": true,
+     "w": 0.166666667,
+     "wExact": true,
+     "clicks": 20
+    },
+    {
+     "d": 325,
+     "e": 2.30625,
+     "exact": false,
+     "w": 0.18125,
+     "wExact": false,
+     "clicks": 23
+    },
+    {
+     "d": 350,
+     "e": 2.6125,
+     "exact": false,
+     "w": 0.195833333,
+     "wExact": false,
+     "clicks": 26
+    },
+    {
+     "d": 375,
+     "e": 2.91875,
+     "exact": false,
+     "w": 0.210416667,
+     "wExact": false,
+     "clicks": 29
+    },
+    {
+     "d": 400,
+     "e": 3.225,
+     "exact": true,
+     "w": 0.225,
+     "wExact": true,
+     "clicks": 32
+    },
+    {
+     "d": 425,
+     "e": 3.56875,
+     "exact": false,
+     "w": 0.24375,
+     "wExact": false,
+     "clicks": 36
+    },
+    {
+     "d": 450,
+     "e": 3.9125,
+     "exact": false,
+     "w": 0.2625,
+     "wExact": false,
+     "clicks": 39
+    },
+    {
+     "d": 475,
+     "e": 4.25625,
+     "exact": false,
+     "w": 0.28125,
+     "wExact": false,
+     "clicks": 43
+    },
+    {
+     "d": 500,
+     "e": 4.6,
+     "exact": true,
+     "w": 0.3,
+     "wExact": true,
+     "clicks": 46
+    },
+    {
+     "d": 525,
+     "e": 4.925,
+     "exact": false,
+     "w": 0.316666667,
+     "wExact": false,
+     "clicks": 49
+    },
+    {
+     "d": 550,
+     "e": 5.25,
+     "exact": false,
+     "w": 0.333333333,
+     "wExact": false,
+     "clicks": 53
+    },
+    {
+     "d": 575,
+     "e": 5.575,
+     "exact": false,
+     "w": 0.35,
+     "wExact": false,
+     "clicks": 56
+    },
+    {
+     "d": 600,
+     "e": 5.9,
+     "exact": true,
+     "w": 0.366666667,
+     "wExact": true,
+     "clicks": 59
+    }
+   ]
+  },
+  "hand/step50": {
+   "sessions": 3,
+   "temps": [
+    18,
+    9,
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 0
+    },
+    {
+     "d": 150,
+     "e": 0.35,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 3
+    },
+    {
+     "d": 200,
+     "e": 0.7,
+     "exact": true,
+     "w": 0.15,
+     "wExact": true,
+     "clicks": 7
+    },
+    {
+     "d": 250,
+     "e": 1.35,
+     "exact": false,
+     "w": 0.158333333,
+     "wExact": false,
+     "clicks": 14
+    },
+    {
+     "d": 300,
+     "e": 2,
+     "exact": true,
+     "w": 0.166666667,
+     "wExact": true,
+     "clicks": 20
+    },
+    {
+     "d": 350,
+     "e": 2.6125,
+     "exact": false,
+     "w": 0.195833333,
+     "wExact": false,
+     "clicks": 26
+    },
+    {
+     "d": 400,
+     "e": 3.225,
+     "exact": true,
+     "w": 0.225,
+     "wExact": true,
+     "clicks": 32
+    },
+    {
+     "d": 450,
+     "e": 3.9125,
+     "exact": false,
+     "w": 0.2625,
+     "wExact": false,
+     "clicks": 39
+    },
+    {
+     "d": 500,
+     "e": 4.6,
+     "exact": true,
+     "w": 0.3,
+     "wExact": true,
+     "clicks": 46
+    },
+    {
+     "d": 550,
+     "e": 5.25,
+     "exact": false,
+     "w": 0.333333333,
+     "wExact": false,
+     "clicks": 53
+    },
+    {
+     "d": 600,
+     "e": 5.9,
+     "exact": true,
+     "w": 0.366666667,
+     "wExact": true,
+     "clicks": 59
+    }
+   ]
+  },
+  "hand/step100": {
+   "sessions": 3,
+   "temps": [
+    18,
+    9,
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 0
+    },
+    {
+     "d": 200,
+     "e": 0.7,
+     "exact": true,
+     "w": 0.15,
+     "wExact": true,
+     "clicks": 7
+    },
+    {
+     "d": 300,
+     "e": 2,
+     "exact": true,
+     "w": 0.166666667,
+     "wExact": true,
+     "clicks": 20
+    },
+    {
+     "d": 400,
+     "e": 3.225,
+     "exact": true,
+     "w": 0.225,
+     "wExact": true,
+     "clicks": 32
+    },
+    {
+     "d": 500,
+     "e": 4.6,
+     "exact": true,
+     "w": 0.3,
+     "wExact": true,
+     "clicks": 46
+    },
+    {
+     "d": 600,
+     "e": 5.9,
+     "exact": true,
+     "w": 0.366666667,
+     "wExact": true,
+     "clicks": 59
+    }
+   ]
+  },
+  "hand/device:ДТК": {
+   "sessions": 3,
+   "temps": [
+    18,
+    9,
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 0
+    },
+    {
+     "d": 150,
+     "e": 0.35,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 3
+    },
+    {
+     "d": 200,
+     "e": 0.7,
+     "exact": true,
+     "w": 0.15,
+     "wExact": true,
+     "clicks": 7
+    },
+    {
+     "d": 250,
+     "e": 1.35,
+     "exact": false,
+     "w": 0.158333333,
+     "wExact": false,
+     "clicks": 14
+    },
+    {
+     "d": 300,
+     "e": 2,
+     "exact": true,
+     "w": 0.166666667,
+     "wExact": true,
+     "clicks": 20
+    },
+    {
+     "d": 350,
+     "e": 2.6125,
+     "exact": false,
+     "w": 0.195833333,
+     "wExact": false,
+     "clicks": 26
+    },
+    {
+     "d": 400,
+     "e": 3.225,
+     "exact": true,
+     "w": 0.225,
+     "wExact": true,
+     "clicks": 32
+    },
+    {
+     "d": 450,
+     "e": 3.9125,
+     "exact": false,
+     "w": 0.2625,
+     "wExact": false,
+     "clicks": 39
+    },
+    {
+     "d": 500,
+     "e": 4.6,
+     "exact": true,
+     "w": 0.3,
+     "wExact": true,
+     "clicks": 46
+    },
+    {
+     "d": 550,
+     "e": 5.25,
+     "exact": false,
+     "w": 0.333333333,
+     "wExact": false,
+     "clicks": 53
+    },
+    {
+     "d": 600,
+     "e": 5.9,
+     "exact": true,
+     "w": 0.366666667,
+     "wExact": true,
+     "clicks": 59
+    }
+   ]
+  },
+  "hand/device:Глушитель": {
+   "sessions": 0,
+   "temps": [],
+   "before": 0,
+   "rows": []
+  },
+  "hand/device:": {
+   "sessions": 0,
+   "temps": [],
+   "before": 0,
+   "rows": []
+  },
+  "hand/rest:bipod": {
+   "sessions": 2,
+   "temps": [
+    18,
+    9
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 0
+    },
+    {
+     "d": 150,
+     "e": 0.45,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 5
+    },
+    {
+     "d": 200,
+     "e": 0.9,
+     "exact": true,
+     "w": 0.066666667,
+     "wExact": true,
+     "clicks": 9
+    },
+    {
+     "d": 250,
+     "e": 1.45,
+     "exact": false,
+     "w": 0.116666667,
+     "wExact": false,
+     "clicks": 15
+    },
+    {
+     "d": 300,
+     "e": 2,
+     "exact": true,
+     "w": 0.166666667,
+     "wExact": true,
+     "clicks": 20
+    },
+    {
+     "d": 350,
+     "e": 2.6125,
+     "exact": false,
+     "w": 0.195833333,
+     "wExact": false,
+     "clicks": 26
+    },
+    {
+     "d": 400,
+     "e": 3.225,
+     "exact": true,
+     "w": 0.225,
+     "wExact": true,
+     "clicks": 32
+    },
+    {
+     "d": 450,
+     "e": 3.9125,
+     "exact": false,
+     "w": 0.2625,
+     "wExact": false,
+     "clicks": 39
+    },
+    {
+     "d": 500,
+     "e": 4.6,
+     "exact": true,
+     "w": 0.3,
+     "wExact": true,
+     "clicks": 46
+    },
+    {
+     "d": 550,
+     "e": 5.25,
+     "exact": false,
+     "w": 0.333333333,
+     "wExact": false,
+     "clicks": 53
+    },
+    {
+     "d": 600,
+     "e": 5.9,
+     "exact": true,
+     "w": 0.366666667,
+     "wExact": true,
+     "clicks": 59
+    }
+   ]
+  },
+  "hand/rest:tripod": {
+   "sessions": 1,
+   "temps": [
+    9
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 200,
+     "e": 0.7,
+     "exact": true,
+     "w": 0.15,
+     "wExact": true,
+     "clicks": 7
+    }
+   ]
+  },
+  "hand/rest:bench": {
+   "sessions": 1,
+   "temps": [
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 0
+    }
+   ]
+  },
+  "hand/rest:sling": {
+   "sessions": 1,
+   "temps": [
+    9
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 0
+    }
+   ]
+  },
+  "hand/range": {
+   "sessions": 3,
+   "temps": [
+    18,
+    9,
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 150,
+     "e": 0.35,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 3
+    },
+    {
+     "d": 200,
+     "e": 0.7,
+     "exact": true,
+     "w": 0.15,
+     "wExact": true,
+     "clicks": 7
+    },
+    {
+     "d": 250,
+     "e": 1.35,
+     "exact": false,
+     "w": 0.158333333,
+     "wExact": false,
+     "clicks": 14
+    },
+    {
+     "d": 300,
+     "e": 2,
+     "exact": true,
+     "w": 0.166666667,
+     "wExact": true,
+     "clicks": 20
+    },
+    {
+     "d": 350,
+     "e": 2.6125,
+     "exact": false,
+     "w": 0.195833333,
+     "wExact": false,
+     "clicks": 26
+    },
+    {
+     "d": 400,
+     "e": 3.225,
+     "exact": true,
+     "w": 0.225,
+     "wExact": true,
+     "clicks": 32
+    },
+    {
+     "d": 450,
+     "e": 3.9125,
+     "exact": false,
+     "w": 0.2625,
+     "wExact": false,
+     "clicks": 39
+    }
+   ]
+  },
+  "factory/step25": {
+   "sessions": 1,
+   "temps": [
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0.2,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 2
+    },
+    {
+     "d": 125,
+     "e": 0.45,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 5
+    },
+    {
+     "d": 150,
+     "e": 0.7,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 7
+    },
+    {
+     "d": 175,
+     "e": 0.95,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 9
+    },
+    {
+     "d": 200,
+     "e": 1.2,
+     "exact": true,
+     "w": 0.1,
+     "wExact": true,
+     "clicks": 12
+    },
+    {
+     "d": 225,
+     "e": 1.525,
+     "exact": false,
+     "w": 0.11875,
+     "wExact": false,
+     "clicks": 15
+    },
+    {
+     "d": 250,
+     "e": 1.85,
+     "exact": false,
+     "w": 0.1375,
+     "wExact": false,
+     "clicks": 19
+    },
+    {
+     "d": 275,
+     "e": 2.175,
+     "exact": false,
+     "w": 0.15625,
+     "wExact": false,
+     "clicks": 22
+    },
+    {
+     "d": 300,
+     "e": 2.5,
+     "exact": true,
+     "w": 0.175,
+     "wExact": true,
+     "clicks": 25
+    }
+   ]
+  },
+  "factory/step50": {
+   "sessions": 1,
+   "temps": [
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0.2,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 2
+    },
+    {
+     "d": 150,
+     "e": 0.7,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 7
+    },
+    {
+     "d": 200,
+     "e": 1.2,
+     "exact": true,
+     "w": 0.1,
+     "wExact": true,
+     "clicks": 12
+    },
+    {
+     "d": 250,
+     "e": 1.85,
+     "exact": false,
+     "w": 0.1375,
+     "wExact": false,
+     "clicks": 19
+    },
+    {
+     "d": 300,
+     "e": 2.5,
+     "exact": true,
+     "w": 0.175,
+     "wExact": true,
+     "clicks": 25
+    }
+   ]
+  },
+  "factory/step100": {
+   "sessions": 1,
+   "temps": [
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0.2,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 2
+    },
+    {
+     "d": 200,
+     "e": 1.2,
+     "exact": true,
+     "w": 0.1,
+     "wExact": true,
+     "clicks": 12
+    },
+    {
+     "d": 300,
+     "e": 2.5,
+     "exact": true,
+     "w": 0.175,
+     "wExact": true,
+     "clicks": 25
+    }
+   ]
+  },
+  "factory/device:ДТК": {
+   "sessions": 0,
+   "temps": [],
+   "before": 0,
+   "rows": []
+  },
+  "factory/device:Глушитель": {
+   "sessions": 1,
+   "temps": [
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0.2,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 2
+    },
+    {
+     "d": 150,
+     "e": 0.7,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 7
+    },
+    {
+     "d": 200,
+     "e": 1.2,
+     "exact": true,
+     "w": 0.1,
+     "wExact": true,
+     "clicks": 12
+    },
+    {
+     "d": 250,
+     "e": 1.85,
+     "exact": false,
+     "w": 0.1375,
+     "wExact": false,
+     "clicks": 19
+    },
+    {
+     "d": 300,
+     "e": 2.5,
+     "exact": true,
+     "w": 0.175,
+     "wExact": true,
+     "clicks": 25
+    }
+   ]
+  },
+  "factory/device:": {
+   "sessions": 0,
+   "temps": [],
+   "before": 0,
+   "rows": []
+  },
+  "factory/rest:bipod": {
+   "sessions": 0,
+   "temps": [],
+   "before": 0,
+   "rows": []
+  },
+  "factory/rest:tripod": {
+   "sessions": 0,
+   "temps": [],
+   "before": 0,
+   "rows": []
+  },
+  "factory/rest:bench": {
+   "sessions": 1,
+   "temps": [
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 100,
+     "e": 0.2,
+     "exact": true,
+     "w": null,
+     "wExact": null,
+     "clicks": 2
+    },
+    {
+     "d": 150,
+     "e": 0.7,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 7
+    },
+    {
+     "d": 200,
+     "e": 1.2,
+     "exact": true,
+     "w": 0.1,
+     "wExact": true,
+     "clicks": 12
+    },
+    {
+     "d": 250,
+     "e": 1.85,
+     "exact": false,
+     "w": 0.1375,
+     "wExact": false,
+     "clicks": 19
+    },
+    {
+     "d": 300,
+     "e": 2.5,
+     "exact": true,
+     "w": 0.175,
+     "wExact": true,
+     "clicks": 25
+    }
+   ]
+  },
+  "factory/rest:sling": {
+   "sessions": 0,
+   "temps": [],
+   "before": 0,
+   "rows": []
+  },
+  "factory/range": {
+   "sessions": 1,
+   "temps": [
+    11
+   ],
+   "before": 0,
+   "rows": [
+    {
+     "d": 150,
+     "e": 0.7,
+     "exact": false,
+     "w": null,
+     "wExact": null,
+     "clicks": 7
+    },
+    {
+     "d": 200,
+     "e": 1.2,
+     "exact": true,
+     "w": 0.1,
+     "wExact": true,
+     "clicks": 12
+    },
+    {
+     "d": 250,
+     "e": 1.85,
+     "exact": false,
+     "w": 0.1375,
+     "wExact": false,
+     "clicks": 19
+    },
+    {
+     "d": 300,
+     "e": 2.5,
+     "exact": true,
+     "w": 0.175,
+     "wExact": true,
+     "clicks": 25
+    }
+   ]
+  }
+ },
+ "offsetAtZero": {
+  "hand": 0,
+  "factory": 0.2
+ },
+ "groupStats": {
+  "all": {
+   "n": 9,
+   "avg": 0.768518519,
+   "best": 0.24
+  },
+  "hand": {
+   "n": 7,
+   "avg": 0.866666667,
+   "best": 0.24
+  },
+  "factory": {
+   "n": 2,
+   "avg": 0.425,
+   "best": 0.41
+  },
+  "allStable": {
+   "n": 6,
+   "avg": 0.336111111,
+   "best": 0.24
+  },
+  "handStable": {
+   "n": 4,
+   "avg": 0.291666667,
+   "best": 0.24
+  },
+  "factoryStable": {
+   "n": 2,
+   "avg": 0.425,
+   "best": 0.41
+  }
+ },
+ "stance": [
+  {
+   "pos": "prone",
+   "rest": "bipod",
+   "n": 3,
+   "avg": 0.298888889
+  },
+  {
+   "pos": "sit",
+   "rest": "bench",
+   "n": 3,
+   "avg": 0.373333333
+  },
+  {
+   "pos": "stand",
+   "rest": "tripod",
+   "n": 2,
+   "avg": 1.4
+  },
+  {
+   "pos": "kneel",
+   "rest": "sling",
+   "n": 1,
+   "avg": 2.1
+  }
+ ],
+ "cold": {
+  "n": 1,
+  "up": 0.25,
+  "right": -0.1
+ },
+ "restShift": [
+  {
+   "rest": "bipod",
+   "avg": -0.0625
+  },
+  {
+   "rest": "tripod",
+   "avg": 0.225
+  }
+ ],
+ "devicesUsed": {
+  "hand": [
+   "ДТК"
+  ],
+  "factory": [
+   "Глушитель"
+  ]
+ },
+ "restsUsed": {
+  "hand": [
+   "bench",
+   "bipod",
+   "tripod",
+   "sling"
+  ],
+  "factory": [
+   "bench"
+  ]
+ },
+ "rounds": [
+  {
+   "date": "2026-10-12",
+   "total": 15,
+   "hand": 5,
+   "factory": 10
+  },
+  {
+   "date": "2026-10-05",
+   "total": 42,
+   "hand": 29,
+   "factory": 0
+  },
+  {
+   "date": "2026-09-14",
+   "total": 33,
+   "hand": 20,
+   "factory": 0
+  }
+ ],
+ "series": [
+  [
+   {
+    "dist": 100,
+    "use": true,
+    "why": null,
+    "eff": 0
+   },
+   {
+    "dist": 100,
+    "use": true,
+    "why": null,
+    "eff": 0.2
+   },
+   {
+    "dist": 200,
+    "use": true,
+    "why": null,
+    "eff": 1.2
+   },
+   {
+    "dist": 300,
+    "use": true,
+    "why": null,
+    "eff": 2.5
+   }
+  ],
+  [
+   {
+    "dist": 400,
+    "use": true,
+    "why": null,
+    "eff": 3.225
+   },
+   {
+    "dist": 500,
+    "use": true,
+    "why": null,
+    "eff": 4.6
+   },
+   {
+    "dist": 600,
+    "use": true,
+    "why": null,
+    "eff": 5.9
+   },
+   {
+    "dist": 700,
+    "use": false,
+    "why": "всё мимо, СТП не записана",
+    "eff": 7.6
+   },
+   {
+    "dist": 200,
+    "use": true,
+    "why": null,
+    "eff": 0.65
+   },
+   {
+    "dist": 200,
+    "use": true,
+    "why": null,
+    "eff": 0.7
+   },
+   {
+    "dist": 100,
+    "use": true,
+    "why": null,
+    "eff": 0
+   }
+  ],
+  [
+   {
+    "dist": 100,
+    "use": true,
+    "why": null,
+    "eff": 0
+   },
+   {
+    "dist": 200,
+    "use": true,
+    "why": null,
+    "eff": 0.9
+   },
+   {
+    "dist": 300,
+    "use": true,
+    "why": null,
+    "eff": 2
+   },
+   {
+    "dist": 300,
+    "use": false,
+    "why": "плохой упор, сорвал два выстрела",
+    "eff": 2.3
+   },
+   {
+    "dist": 400,
+    "use": true,
+    "why": null,
+    "eff": 3.1
+   }
+  ]
+ ],
+ "groups": {
+  "hand": [
+   {
+    "date": "2026-10-12",
+    "dist": 100,
+    "a": 0.27,
+    "stable": true
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 500,
+    "a": 0.34,
+    "stable": true
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 200,
+    "a": 1.3,
+    "stable": false
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 200,
+    "a": 1.5,
+    "stable": false
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 100,
+    "a": 2.1,
+    "stable": false
+   },
+   {
+    "date": "2026-09-14",
+    "dist": 100,
+    "a": 0.24,
+    "stable": true
+   },
+   {
+    "date": "2026-09-14",
+    "dist": 300,
+    "a": 0.316666667,
+    "stable": true
+   }
+  ],
+  "factory": [
+   {
+    "date": "2026-10-12",
+    "dist": 100,
+    "a": 0.41,
+    "stable": true
+   },
+   {
+    "date": "2026-10-12",
+    "dist": 200,
+    "a": 0.44,
+    "stable": true
+   }
+  ]
+ },
+ "stability": {
+  "hand": [
+   {
+    "date": "2026-10-12",
+    "dist": 100,
+    "v": 0,
+    "off": false
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 400,
+    "v": 3.225,
+    "off": false
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 500,
+    "v": 4.6,
+    "off": false
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 600,
+    "v": 5.9,
+    "off": false
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 200,
+    "v": 0.65,
+    "off": false
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 200,
+    "v": 0.7,
+    "off": false
+   },
+   {
+    "date": "2026-10-05",
+    "dist": 100,
+    "v": 0,
+    "off": false
+   },
+   {
+    "date": "2026-09-14",
+    "dist": 100,
+    "v": 0,
+    "off": false
+   },
+   {
+    "date": "2026-09-14",
+    "dist": 200,
+    "v": 0.9,
+    "off": true
+   },
+   {
+    "date": "2026-09-14",
+    "dist": 300,
+    "v": 2,
+    "off": false
+   },
+   {
+    "date": "2026-09-14",
+    "dist": 400,
+    "v": 3.1,
+    "off": false
+   }
+  ],
+  "factory": [
+   {
+    "date": "2026-10-12",
+    "dist": 100,
+    "v": 0.2,
+    "off": false
+   },
+   {
+    "date": "2026-10-12",
+    "dist": 200,
+    "v": 1.2,
+    "off": false
+   },
+   {
+    "date": "2026-10-12",
+    "dist": 300,
+    "v": 2.5,
+    "off": false
+   }
+  ]
+ },
+ "barrel": [
+  {
+   "date": "2026-09-14",
+   "total": 33
+  },
+  {
+   "date": "2026-10-05",
+   "total": 75
+  },
+  {
+   "date": "2026-10-12",
+   "total": 90
+  }
+ ]
+}
