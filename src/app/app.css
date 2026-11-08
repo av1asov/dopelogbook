@@ -1,20 +1,20 @@
+/* Pinned to the window: installed iOS apps can report viewport units short until the first scroll. */
 :host {
+  --top-edge: max(env(safe-area-inset-top, 0px), 11px);
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--top-edge);
 }
 
-/*
- * The page runs under the translucent iOS status bar, so its colour is painted here.
- * Fixed and opaque on purpose: otherwise iOS 26+ blurs the top of installed apps.
- */
+/* iOS 26+ blurs the top of installed apps unless an opaque fixed element sits at the edge. */
 .status-bar {
   position: fixed;
   top: 0;
   right: 0;
   left: 0;
-  height: env(safe-area-inset-top, 0px);
+  height: var(--top-edge);
   background: var(--status-bar);
 }
 
