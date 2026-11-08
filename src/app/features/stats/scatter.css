@@ -1,0 +1,66 @@
+:host {
+  display: block;
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--f-num);
+}
+
+.grid {
+  stroke: var(--grid);
+}
+
+.axis {
+  stroke: var(--axis);
+}
+
+.tick,
+.title {
+  fill: var(--ink-2);
+  font-size: 12px;
+}
+
+.title {
+  font-family: var(--f-body);
+}
+
+.reference {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.mark {
+  stroke: var(--sheet);
+  stroke-width: 2;
+}
+
+.c0 {
+  fill: var(--c0);
+}
+
+.c1 {
+  fill: var(--c1);
+}
+
+.c2 {
+  fill: var(--c2);
+}
+
+.c3 {
+  fill: var(--c3);
+}
+
+.hit {
+  fill: transparent;
+}
+
+.tip {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 13px;
+}

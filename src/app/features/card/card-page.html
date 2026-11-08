@@ -1,0 +1,96 @@
+@if (data(); as card) {
+  <div class="page">
+    <header class="head">
+      <div class="names">
+        <span class="rifle">{{ card.rifle.name }}</span>
+        <span class="ammo">{{ title() }}</span>
+        <span class="specs num">{{ specs() }}</span>
+      </div>
+      <button
+        type="button"
+        class="link"
+        aria-label="Выбрать патрон и опору"
+        (click)="sheetOpen.set(true)"
+      >
+        Связка ▾
+      </button>
+    </header>
+
+    <div class="body">
+      @if (rows().length) {
+        <div class="row titles" [class.no-wind]="!showWind()">
+          <span>м</span>
+          <span class="right">Верт.</span>
+          <span class="right">Щелч.</span>
+          @if (showWind()) {
+            <span class="right">Ветер/1</span>
+          }
+        </div>
+        @for (row of rows(); track row.d; let even = $even) {
+          <div class="row data num" [class.no-wind]="!showWind()" [class.shade]="!even">
+            <span class="dist">{{ row.d }}</span>
+            <span class="elev right" [class.est]="!row.exact">{{ row.elev }}</span>
+            <span class="clicks right" [class.est]="!row.exact">{{ row.clicks }}</span>
+            @if (showWind()) {
+              <span class="wind right">{{ row.wind }}</span>
+            }
+          </div>
+        }
+        <p class="foot">{{ footnote() }}</p>
+      } @else {
+        <div class="empty">
+          <b>Для этой связки данных нет</b>
+          <span>
+            Запишите стрельбу этим патроном: в карту идут серии с попаданиями или записанной СТП,
+            кроме отмеченных «Не учитывать».
+          </span>
+        </div>
+      }
+
+      @for (note of warnings(); track note.text) {
+        <p class="note" [class.warn]="note.kind === 'warn'">{{ note.text }}</p>
+      }
+
+      @if (message(); as text) {
+        <p class="note warn">{{ text }}</p>
+      }
+
+      @if (rows().length) {
+        <div class="actions">
+          <button type="button" class="primary" [disabled]="busy()" (click)="savePng()">
+            {{ busy() ? 'Готовлю…' : 'Сохранить PNG' }}
+          </button>
+          <button type="button" class="secondary" (click)="shareText()">Поделиться</button>
+        </div>
+      }
+    </div>
+  </div>
+
+  @if (sheetOpen()) {
+    <app-card-sheet [data]="card" (closed)="sheetOpen.set(false)" />
+  }
+
+  @if (pngUrl(); as url) {
+    <div class="png" role="dialog" aria-label="Карта PNG">
+      <img [src]="url" alt="DOPE-карта" />
+      <p>Нажмите и удерживайте картинку, чтобы сохранить её.</p>
+      <button type="button" class="secondary" (click)="closePng()">Закрыть</button>
+    </div>
+  }
+} @else {
+  <div class="screen">
+    <h1 class="screen-title">DOPE-карта</h1>
+    <div class="card">
+      @if (view.rifle(); as rifle) {
+        @if (!hasCombos()) {
+          <b>У «{{ rifle.name }}» нет патронов</b>
+          <a class="btn-mark" [routerLink]="['/more/rifles', rifle.id]">Привязать патрон</a>
+        }
+      } @else {
+        <b>Дневник пока пустой</b>
+        <a class="btn-mark" routerLink="/more/rifles/new">Добавить винтовку</a>
+        <a class="btn" routerLink="/more">Импорт из файла</a>
+      }
+    </div>
+  </div>
+}

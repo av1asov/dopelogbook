@@ -1,0 +1,87 @@
+<div class="screen">
+  <div class="title-row">
+    <h1 class="screen-title">Журнал</h1>
+    <app-rifle-button />
+  </div>
+
+  @if (ammoChips().length > 1) {
+    <div class="chips">
+      <button
+        type="button"
+        class="chip"
+        [attr.aria-pressed]="!view.ammoId()"
+        (click)="view.ammoId.set(null)"
+      >
+        Все
+      </button>
+      @for (ammo of ammoChips(); track ammo.id) {
+        <button
+          type="button"
+          class="chip"
+          [attr.aria-pressed]="view.ammoId() === ammo.id"
+          (click)="view.ammoId.set(ammo.id)"
+        >
+          {{ ammo.name }}
+        </button>
+      }
+    </div>
+  }
+
+  @for (card of cards(); track card.id) {
+    <a class="card entry" [routerLink]="['/journal', card.id]">
+      <span class="head">
+        <span class="date num">{{ card.date }}</span>
+        <span class="place">{{ card.place }}</span>
+        @if (card.open) {
+          <span class="badge hand">идёт</span>
+        }
+        @if (card.zero) {
+          <span class="badge hand">{{ card.zero }}</span>
+        }
+        <span class="summary muted">{{ card.summary }}</span>
+      </span>
+      @for (line of card.ammo; track line.ammoId) {
+        <span class="line muted">
+          <b>{{ line.name }}</b>
+          <span>{{ line.count }}</span>
+          @if (line.dist) {
+            <span class="num ink">{{ line.dist }}</span>
+          }
+          @if (line.group) {
+            <span
+              >кучн. <b class="num">{{ line.group }}</b></span
+            >
+          }
+        </span>
+      }
+      @if (card.details.length || card.out) {
+        <span class="line small muted">
+          @for (detail of card.details; track detail) {
+            <span>{{ detail }}</span>
+          }
+          @if (card.out) {
+            <span class="warn">не в карте: {{ card.out }}</span>
+          }
+        </span>
+      }
+      @if (card.notes) {
+        <span class="notes">{{ card.notes }}</span>
+      }
+    </a>
+  } @empty {
+    <div class="card">
+      @if (view.rifle()) {
+        <b>Записей нет</b>
+        <span class="hint">Начните стрельбу на вкладке «Рубеж».</span>
+        <a class="btn-mark" routerLink="/range">На рубеж</a>
+      } @else {
+        <b>Дневник пока пустой</b>
+        <span class="hint"
+          >Заведите винтовку и патроны или перенесите записи из резервной копии.</span
+        >
+        <a class="btn-mark" routerLink="/more/rifles/new">Добавить винтовку</a>
+        <a class="btn" routerLink="/more">Импорт из файла</a>
+      }
+    </div>
+  }
+</div>

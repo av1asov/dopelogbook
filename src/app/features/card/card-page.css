@@ -1,0 +1,206 @@
+/* The card stays paper-coloured in both themes: it is read like a printed sheet. */
+:host {
+  display: block;
+  min-height: 100%;
+  background: #fbfbf8;
+  color: #151815;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 3px solid #151815;
+}
+
+.names {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rifle {
+  font-family: var(--f-display);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.ammo {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.specs {
+  color: #4c5650;
+  font-size: 13px;
+}
+
+.link {
+  flex: none;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1.5px solid #151815;
+  border-radius: 6px;
+  background: #fbfbf8;
+  color: #151815;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px 16px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 70px repeat(3, minmax(0, 1fr));
+  align-items: baseline;
+}
+
+.row.no-wind {
+  grid-template-columns: 70px repeat(2, minmax(0, 1fr));
+}
+
+.titles {
+  padding: 8px 0 6px;
+  border-bottom: 1.5px solid #151815;
+  color: #4c5650;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.right {
+  text-align: right;
+}
+
+.data {
+  padding: 9px 0;
+  border-bottom: 1px solid #d5d8cf;
+}
+
+.shade {
+  background: #eef0ea;
+}
+
+.dist {
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.elev {
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.clicks {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.est {
+  color: #5f665f;
+  font-weight: 500;
+}
+
+.wind {
+  color: #4c5650;
+  font-size: 20px;
+}
+
+.foot,
+.note {
+  margin: 8px 0 0;
+  color: #4c5650;
+  font-size: 13px;
+}
+
+.note.warn {
+  padding: 4px 8px;
+  border-left: 3px solid #a0560f;
+  color: #a0560f;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0;
+  color: #4c5650;
+  font-size: 14px;
+}
+
+.empty b {
+  color: #151815;
+  font-size: 17px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.primary,
+.secondary {
+  flex: 1;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 2px solid #151815;
+  border-radius: 8px;
+  color: #151815;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.primary {
+  background: #f1c40f;
+}
+
+.secondary {
+  background: #fbfbf8;
+}
+
+.png {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px
+    calc(16px + env(safe-area-inset-bottom, 0px));
+  background: rgb(10 12 10 / 90%);
+  color: #f5f6f2;
+}
+
+.png img {
+  max-width: 100%;
+  max-height: 70%;
+  -webkit-touch-callout: default;
+}
+
+.png p {
+  margin: 0;
+  font-size: 14px;
+  text-align: center;
+}
+
+.png .secondary {
+  flex: none;
+  min-width: 160px;
+}

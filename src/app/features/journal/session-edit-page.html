@@ -1,0 +1,229 @@
+<header class="edit-header">
+  <button type="button" (click)="cancel()">Отмена</button>
+  <b>Запись</b>
+  <button type="submit" form="session-form">Готово</button>
+</header>
+
+<form id="session-form" class="screen" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
+
+  <div class="form-grid">
+    <label class="field">Дата<input class="num" type="date" formControlName="date" /></label>
+    <label class="field">
+      Винтовка
+      <select formControlName="rifleId">
+        @for (rifle of store.rifles(); track rifle.id) {
+          <option [value]="rifle.id">{{ rifle.name }}</option>
+        }
+      </select>
+    </label>
+    <label class="field wide">Место<input formControlName="place" /></label>
+    <div class="field">
+      t, °C
+      <app-signed-input label="Температура" formControlName="temp" />
+    </div>
+    <label class="field">
+      Давл., мм рт. ст.
+      <input class="num" inputmode="decimal" formControlName="pressure" />
+    </label>
+    <label class="field">
+      Высота, м
+      <input class="num" inputmode="decimal" formControlName="altitude" />
+    </label>
+    <label class="field">
+      Выстрелов вне серий
+      <input class="num" inputmode="numeric" formControlName="extraRounds" />
+    </label>
+  </div>
+
+  <section class="card">
+    <label class="check">
+      <input type="checkbox" formControlName="rezeroOn" />
+      В этот день выставил ноль
+    </label>
+    @if (form.controls.rezeroOn.value) {
+      <div class="form-grid">
+        <label class="field">
+          Дистанция, м
+          <input class="num" inputmode="numeric" formControlName="rezeroDist" />
+        </label>
+        <label class="field">
+          Под патрон
+          <select formControlName="rezeroAmmo">
+            @for (ammo of ammoOptions(form.controls.rezeroAmmo.value); track ammo.id) {
+              <option [value]="ammo.id">{{ ammo.name }}</option>
+            }
+          </select>
+        </label>
+      </div>
+    }
+  </section>
+
+  <ng-template #coldBlock>
+    <section class="cold">
+      <label class="check">
+        <input type="checkbox" formControlName="coldOn" />
+        Первый выстрел — из холодного ствола
+      </label>
+      @if (form.controls.coldOn.value) {
+        <div class="form-grid">
+          <div class="field">
+            Он лёг, верт., мм
+            <app-signed-input
+              label="Холодный выстрел по вертикали"
+              plus="↑"
+              minus="↓"
+              formControlName="coldUp"
+            />
+          </div>
+          <div class="field">
+            Он лёг, гориз., мм
+            <app-signed-input
+              label="Холодный выстрел по горизонтали"
+              plus="→"
+              minus="←"
+              formControlName="coldRight"
+            />
+          </div>
+        </div>
+      }
+    </section>
+  </ng-template>
+
+  @if (standalone()) {
+    <ng-container [ngTemplateOutlet]="coldBlock" />
+  }
+
+  <section class="section" formArrayName="series">
+    <h2 class="section-title">Серии</h2>
+    @for (series of form.controls.series.controls; track series; let i = $index) {
+      <div class="card series" [formGroupName]="i">
+        <div class="series-head">
+          <b>Серия {{ i + 1 }}</b>
+          <button type="button" class="link-btn" (click)="removeSeries(i)">Убрать</button>
+        </div>
+        <div class="form-grid">
+          <label class="field wide">
+            Патрон
+            <select formControlName="ammoId">
+              @for (ammo of ammoOptions(series.controls.ammoId.value); track ammo.id) {
+                <option [value]="ammo.id">{{ ammo.name }}</option>
+              }
+            </select>
+          </label>
+          <label class="field wide">
+            Дульное устройство
+            <select formControlName="device">
+              @for (device of deviceOptions(series.controls.device.value); track device) {
+                <option [value]="device">{{ devName(device) }}</option>
+              }
+            </select>
+          </label>
+          <label class="field">
+            Положение
+            <select formControlName="pos">
+              <option value="">—</option>
+              @for (item of positions; track item[0]) {
+                <option [value]="item[0]">{{ item[1] }}</option>
+              }
+            </select>
+          </label>
+          <label class="field">
+            Опора
+            <select formControlName="rest">
+              <option value="">—</option>
+              @for (item of rests; track item[0]) {
+                <option [value]="item[0]">{{ item[1] }}</option>
+              }
+            </select>
+          </label>
+          <label class="field">
+            Дист., м
+            <input class="num" inputmode="numeric" formControlName="dist" />
+          </label>
+          <label class="field">
+            Верт., {{ units() }}
+            <input class="num" inputmode="decimal" formControlName="elev" />
+          </label>
+          <label class="field">
+            Ветер, м/с
+            <input class="num" inputmode="decimal" formControlName="windSpeed" />
+          </label>
+          <label class="field">
+            Гориз., {{ units() }}
+            <input class="num" inputmode="decimal" formControlName="windCorr" />
+          </label>
+          <label class="field">
+            Попаданий
+            <input class="num" inputmode="numeric" formControlName="hits" />
+          </label>
+          <label class="field">
+            Выстрелов
+            <input class="num" inputmode="numeric" formControlName="shots" />
+          </label>
+          <label class="field wide">
+            Группа, мм
+            <input class="num" inputmode="decimal" formControlName="group" />
+          </label>
+          <div class="field">
+            СТП верт., мм
+            <app-signed-input label="СТП по вертикали" plus="↑" minus="↓" formControlName="offUp" />
+          </div>
+          <div class="field">
+            СТП гориз., мм
+            <app-signed-input
+              label="СТП по горизонтали"
+              plus="→"
+              minus="←"
+              formControlName="offRight"
+            />
+          </div>
+          <label class="field wide">Заметка<input formControlName="note" /></label>
+        </div>
+        <label class="check">
+          <input type="checkbox" formControlName="skip" />
+          Не учитывать
+        </label>
+        @if (series.controls.skip.value) {
+          <label class="field">
+            Почему
+            <input formControlName="skipReason" placeholder="флаер, эксперимент, сбит ноль" />
+          </label>
+        }
+        @if (i === coldCard() && !standalone()) {
+          <ng-container [ngTemplateOutlet]="coldBlock" />
+        }
+      </div>
+    }
+    <button type="button" class="btn" (click)="addSeries()">Добавить серию</button>
+  </section>
+
+  <label class="field">Заметки<textarea formControlName="notes"></textarea></label>
+
+  <section class="section">
+    <h2 class="section-title">Мишени</h2>
+    @for (photo of photos(); track photo.id; let i = $index) {
+      <div class="photo-row">
+        <app-photo class="thumb" [photoId]="photo.id" />
+        <select class="input" aria-label="К чему относится мишень" (change)="linkPhoto(i, $event)">
+          @for (option of photoOptions(); track option.value) {
+            <option [value]="option.value" [selected]="option.value === photoValue(photo)">
+              {{ option.label }}
+            </option>
+          }
+        </select>
+        <button type="button" class="remove" aria-label="Убрать фото" (click)="removePhoto(i)">
+          ✕
+        </button>
+      </div>
+    }
+    <label class="btn">
+      {{ photoBusy() ? 'Сохраняю…' : 'Добавить фото' }}
+      <input type="file" accept="image/*" hidden (change)="addPhoto($event)" />
+    </label>
+  </section>
+
+  <button class="btn-mark" type="submit">Сохранить</button>
+</form>

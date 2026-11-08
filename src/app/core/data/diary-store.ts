@@ -64,6 +64,28 @@ export class DiaryStore {
     await this.remove('ammo', id);
   }
 
+  getPhoto(id: string): Promise<Blob | undefined> {
+    return this.repository.getPhoto(id);
+  }
+
+  /** Only one session can be open, so any other open one is closed first. */
+  async reopenSession(id: string): Promise<void> {
+    for (const session of this.diary().sessions) {
+      if (session.open && session.id !== id) await this.closeSession(session.id, false);
+    }
+    const session = this.diary().sessions.find((s) => s.id === id);
+    if (session) await this.repository.put('session', { ...session, open: true });
+    await this.reload();
+  }
+
+  async closeSession(id: string, reload = true): Promise<void> {
+    const session = this.diary().sessions.find((s) => s.id === id);
+    if (!session) return;
+    const { open: _open, ...closed } = session;
+    await this.repository.put('session', closed);
+    if (reload) await this.reload();
+  }
+
   addPhoto(blob: Blob): Promise<string> {
     return this.repository.putPhoto(blob);
   }

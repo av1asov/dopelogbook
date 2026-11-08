@@ -19,6 +19,7 @@ import {
   firstSeriesDefaults,
   fmt,
   fmtAng,
+  fmtTemp,
   groupAng,
   interp,
   nextSeriesDefaults,
@@ -119,8 +120,7 @@ export class RangeSession implements OnInit {
 
   protected readonly conditions = computed(() => {
     const s = this.session();
-    const temp =
-      s.temp != null ? `${s.temp > 0 ? '+' : s.temp < 0 ? '−' : ''}${Math.abs(s.temp)} °C` : '';
+    const temp = fmtTemp(s.temp);
     return [s.place, shortDate(s.date), temp].filter(Boolean).join(' · ');
   });
 

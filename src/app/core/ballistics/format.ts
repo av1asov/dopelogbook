@@ -46,3 +46,8 @@ export function todayIso(now = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
+
+/** 6 → +6 °C */
+export function fmtTemp(t: number | null | undefined): string {
+  return t == null ? '' : `${fmtSigned(t, 0)} °C`;
+}

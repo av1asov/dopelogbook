@@ -1,0 +1,274 @@
+<div class="screen">
+  <div class="title-row">
+    <h1 class="screen-title">Статистика</h1>
+    <div class="controls">
+      <app-rifle-button />
+      <button type="button" class="unit" (click)="toggleUnit()">{{ unit() }}</button>
+    </div>
+  </div>
+
+  @if (view.rifle(); as rifle) {
+    @if (ammoChips().length) {
+      <section class="card">
+        <button type="button" class="report" (click)="toggle('progress')">
+          <h2>Расту ли я как стрелок?</h2>
+          <span class="muted">{{ isOpen('progress') ? '⌄' : '›' }}</span>
+        </button>
+        @if (progress(); as p) {
+          @if (p.summary; as summary) {
+            <div class="lead">
+              <b class="num big">{{ summary.value }}</b>
+              <span class="muted">{{ summary.text }}</span>
+            </div>
+            <app-scatter
+              [points]="p.points"
+              [xTime]="true"
+              [compact]="!isOpen('progress')"
+              [yFormat]="oneDigit"
+              [yTitle]="unit()"
+            />
+            @if (p.legend.length > 1) {
+              <div class="legend">
+                @for (item of p.legend; track item.name) {
+                  <span>
+                    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                      @switch (item.cls) {
+                        @case ('c2') {
+                          <rect class="c2" x="1" y="1" width="8" height="8" rx="1" />
+                        }
+                        @case ('c3') {
+                          <path class="c3" d="M5 0L10 5L5 10L0 5Z" />
+                        }
+                        @default {
+                          <circle [class]="item.cls" cx="5" cy="5" r="4.5" />
+                        }
+                      }
+                    </svg>
+                    {{ item.name }}
+                  </span>
+                }
+              </div>
+            }
+            @if (isOpen('progress')) {
+              <p class="hint">
+                Размах каждой группы от 3 выстрелов по датам, {{ unit() }}. Ниже — кучнее. Коснитесь
+                точки, чтобы увидеть подробности.
+              </p>
+            }
+          } @else {
+            <p class="hint">Нужно хотя бы две группы с записанным размером.</p>
+          }
+        }
+      </section>
+
+      <section class="card">
+        <button type="button" class="report" (click)="toggle('ammo')">
+          <h2>Какой патрон лучше?</h2>
+          <span class="muted">{{ isOpen('ammo') ? '⌄' : '›' }}</span>
+        </button>
+        @if (ammo(); as a) {
+          @if (isOpen('ammo')) {
+            <svg
+              class="strip"
+              [attr.viewBox]="'0 0 ' + a.chart.W + ' ' + a.chart.H"
+              role="img"
+              aria-label="Кучность патронов"
+            >
+              @for (row of a.chart.rows; track row.name) {
+                <text class="name" [attr.x]="a.chart.left" [attr.y]="row.nameY">
+                  {{ row.name }}
+                </text>
+                <line
+                  class="grid"
+                  [attr.x1]="a.chart.left"
+                  [attr.x2]="a.chart.right"
+                  [attr.y1]="row.y"
+                  [attr.y2]="row.y"
+                />
+                @for (dot of row.dots; track $index) {
+                  <circle class="dot" [attr.cx]="dot.x" [attr.cy]="row.y" r="5" />
+                  <circle
+                    class="hit"
+                    [attr.cx]="dot.x"
+                    [attr.cy]="row.y"
+                    r="11"
+                    (click)="tip.set(dot.tip)"
+                  />
+                }
+                <line
+                  class="mean"
+                  [attr.x1]="row.meanX"
+                  [attr.x2]="row.meanX"
+                  [attr.y1]="row.meanTop"
+                  [attr.y2]="row.meanBottom"
+                />
+                <text class="value" [attr.x]="a.chart.labelX" [attr.y]="row.valueY">
+                  {{ row.mean }}
+                </text>
+                <text class="tick" [attr.x]="a.chart.labelX" [attr.y]="row.countY">
+                  {{ row.count }}
+                </text>
+              }
+              @for (tick of a.chart.ticks; track tick.x) {
+                <text class="tick" [attr.x]="tick.x" [attr.y]="a.chart.axisY" text-anchor="middle">
+                  {{ tick.label }}
+                </text>
+              }
+            </svg>
+            @if (tip(); as text) {
+              <p class="tip">{{ text }}</p>
+            }
+            <p class="hint">
+              Точки — отдельные группы, черта — среднее, {{ unit() }}. При 2–3 группах на патрон
+              разница в 0,1–0,2 ещё ничего не значит.
+            </p>
+          } @else {
+            <div class="bars">
+              @for (bar of a.bars; track bar.name) {
+                <span>{{ bar.name }}</span>
+                <span class="track"><i [style.width.%]="bar.width"></i></span>
+                <b class="num right">{{ bar.value }}</b>
+              }
+            </div>
+          }
+          <span class="hint">{{ a.caption }}</span>
+        } @else {
+          <p class="hint">Пока нет групп со стола, сошек или мешка.</p>
+        }
+      </section>
+
+      <section class="card">
+        <button type="button" class="report" (click)="toggle('stance')">
+          <h2>Какую цель я надёжно поражаю?</h2>
+          <span class="muted">{{ isOpen('stance') ? '⌄' : '›' }}</span>
+        </button>
+        @if (stances().length) {
+          <div class="table">
+            <span class="th">положение</span>
+            <span class="th right">100 м</span>
+            <span class="th right">300 м</span>
+            @for (row of stances(); track row.key) {
+              <span>{{ row.name }}</span>
+              <b class="num right">{{ row.at100 }} см</b>
+              <b class="num right">{{ row.at300 }} см</b>
+              @if (isOpen('stance')) {
+                <span class="extra">
+                  <span class="track"><i [style.width.%]="row.width"></i></span>
+                  <span class="num">{{ row.value }} {{ unit() }}</span>
+                  <span class="muted">{{ row.n }} гр.</span>
+                </span>
+              }
+            }
+          </div>
+          @if (isOpen('stance')) {
+            <p class="hint">
+              Средний размах группы всеми патронами. Цель меньше этого размера на такой дистанции
+              надёжно не поразить.
+            </p>
+          }
+        } @else {
+          <p class="hint">Пока нет групп с записанным размером.</p>
+        }
+      </section>
+
+      <section class="card">
+        <button type="button" class="report" (click)="toggle('stability')">
+          <h2>Насколько стабильны поправки?</h2>
+          <span class="muted">{{ isOpen('stability') ? '⌄' : '›' }}</span>
+        </button>
+        @if (stability(); as s) {
+          <span class="line" [class.warn]="s.off">{{ s.summary }}</span>
+          @if (isOpen('stability')) {
+            @if (ammoChips().length > 1) {
+              <div class="chips">
+                @for (ammo of ammoChips(); track ammo.id) {
+                  <button
+                    type="button"
+                    class="chip"
+                    [attr.aria-pressed]="ammo.id === stabilityAmmo()"
+                    (click)="view.ammoId.set(ammo.id)"
+                  >
+                    {{ ammo.name }}
+                  </button>
+                }
+              </div>
+            }
+            @if (s.enough) {
+              <app-scatter
+                [points]="s.points"
+                [line]="s.line"
+                [xFormat]="noDigits"
+                [yFormat]="oneDigit"
+                [yTitle]="'Верт. поправка, ' + s.units"
+                xTitle="дистанция, м"
+              />
+              <div class="legend">
+                <span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                    <circle class="c1" cx="5" cy="5" r="4.5" />
+                  </svg>
+                  серия
+                </span>
+                <span>
+                  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                    <rect class="c2" x="1" y="1" width="8" height="8" rx="1" />
+                  </svg>
+                  отличается от карты на {{ s.tolerance }} и больше
+                </span>
+              </div>
+              <p class="hint">
+                Линия — текущая DOPE-карта: на каждой дистанции самая свежая серия.
+              </p>
+            } @else {
+              <p class="hint">Нужны серии хотя бы на двух дистанциях.</p>
+            }
+          }
+        }
+      </section>
+
+      <section class="card">
+        <button type="button" class="report" (click)="toggle('barrel')">
+          <h2>Ресурс ствола</h2>
+          <span class="muted">{{ isOpen('barrel') ? '⌄' : '›' }}</span>
+        </button>
+        @if (barrel(); as b) {
+          <span class="line muted">
+            <b class="num ink">{{ b.total }}</b> выстрелов
+            @if (b.coldOffset) {
+              · холодный ствол {{ b.coldOffset }}
+            }
+          </span>
+          @if (isOpen('barrel')) {
+            @if (b.points.length >= 2) {
+              <app-scatter
+                [points]="b.points"
+                [line]="b.line"
+                [xTime]="true"
+                [yFormat]="noDigits"
+                yTitle="выстрелов всего"
+              />
+            }
+            @if (b.coldOffset) {
+              <p class="hint">
+                Холодный ствол ({{ b.coldTimes }} раз): первый выстрел в среднем
+                {{ b.coldOffset }} от точки прицеливания.
+              </p>
+            }
+            <p class="hint">Накопительно по всем стрельбам из этой винтовки, всеми патронами.</p>
+          }
+        }
+      </section>
+    } @else {
+      <div class="card">
+        <b>У «{{ rifle.name }}» нет патронов</b>
+        <a class="btn-mark" [routerLink]="['/more/rifles', rifle.id]">Привязать патрон</a>
+      </div>
+    }
+  } @else {
+    <div class="card">
+      <b>Дневник пока пустой</b>
+      <a class="btn-mark" routerLink="/more/rifles/new">Добавить винтовку</a>
+      <a class="btn" routerLink="/more">Импорт из файла</a>
+    </div>
+  }
+</div>

@@ -1,0 +1,59 @@
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.check input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--pen);
+}
+
+.series {
+  gap: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--ink);
+}
+
+.series-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cold {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--sheet);
+  border: 2px solid var(--pen);
+}
+
+.photo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thumb {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+}
+
+.remove {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+}

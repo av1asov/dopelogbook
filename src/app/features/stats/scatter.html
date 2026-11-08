@@ -1,0 +1,70 @@
+@let c = chart();
+<svg [attr.viewBox]="'0 0 ' + c.W + ' ' + c.H" role="img" [attr.aria-label]="yTitle()">
+  @if (!compact()) {
+    @for (tick of c.grid; track tick.y) {
+      <line
+        class="grid"
+        [attr.x1]="c.left"
+        [attr.x2]="c.right"
+        [attr.y1]="tick.y"
+        [attr.y2]="tick.y"
+      />
+      <text class="tick" [attr.x]="c.left - 6" [attr.y]="tick.textY" text-anchor="end">
+        {{ tick.label }}
+      </text>
+    }
+    @for (label of c.xLabels; track label.x) {
+      <text class="tick" [attr.x]="label.x" [attr.y]="c.labelY" text-anchor="middle">
+        {{ label.label }}
+      </text>
+    }
+    <text class="title" [attr.x]="c.left" y="12">{{ yTitle() }}</text>
+    @if (xTitle()) {
+      <text class="title" [attr.x]="c.right" [attr.y]="c.xTitleY" text-anchor="end">
+        {{ xTitle() }}
+      </text>
+    }
+  }
+  <line
+    class="axis"
+    [attr.x1]="c.left"
+    [attr.x2]="c.right"
+    [attr.y1]="c.axisY"
+    [attr.y2]="c.axisY"
+  />
+  @if (c.polyline) {
+    <polyline class="reference" [attr.points]="c.polyline" />
+  }
+  @for (mark of c.marks; track $index) {
+    @switch (mark.cls) {
+      @case ('c2') {
+        <rect
+          class="mark c2"
+          [attr.x]="mark.cx - 5"
+          [attr.y]="mark.cy - 5"
+          width="10"
+          height="10"
+          rx="1.5"
+        />
+      }
+      @case ('c3') {
+        <path class="mark c3" [attr.d]="mark.diamond" />
+      }
+      @default {
+        <circle class="mark" [class]="mark.cls" [attr.cx]="mark.cx" [attr.cy]="mark.cy" r="5.5" />
+      }
+    }
+    @if (!compact()) {
+      <circle
+        class="hit"
+        [attr.cx]="mark.cx"
+        [attr.cy]="mark.cy"
+        r="12"
+        (click)="tip.set(mark.tip)"
+      />
+    }
+  }
+</svg>
+@if (tip(); as text) {
+  <p class="tip">{{ text }}</p>
+}
