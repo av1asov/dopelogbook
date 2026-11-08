@@ -1,0 +1,67 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+/* The page runs under the translucent iOS status bar, so its colour is painted here. */
+.status-bar {
+  flex: none;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--status-bar);
+}
+
+.update {
+  flex: none;
+  min-height: 44px;
+  border: 0;
+  background: var(--mark);
+  color: var(--mark-ink);
+  font-weight: 700;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.tabs {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
+  background: var(--sheet);
+  border-top: 1.5px solid var(--ink);
+}
+
+.tabs a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  color: var(--ink-2);
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.tabs a.active {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.tabs svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.tabs a.active svg {
+  stroke-width: 2.2;
+}

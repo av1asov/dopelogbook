@@ -1,0 +1,147 @@
+@import '@fontsource/tektur/cyrillic-700.css';
+@import '@fontsource/tektur/latin-700.css';
+@import '@fontsource/tektur/cyrillic-800.css';
+@import '@fontsource/tektur/latin-800.css';
+@import '@fontsource/jetbrains-mono/cyrillic-400.css';
+@import '@fontsource/jetbrains-mono/latin-400.css';
+@import '@fontsource/jetbrains-mono/cyrillic-400-italic.css';
+@import '@fontsource/jetbrains-mono/latin-400-italic.css';
+@import '@fontsource/jetbrains-mono/cyrillic-500.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+@import '@fontsource/jetbrains-mono/cyrillic-700.css';
+@import '@fontsource/jetbrains-mono/latin-700.css';
+@import '@fontsource/jetbrains-mono/cyrillic-800.css';
+@import '@fontsource/jetbrains-mono/latin-800.css';
+
+/*
+ * IBM's own package: the Google Fonts build of Plex Sans Condensed
+ * (and so Fontsource) has no basic Cyrillic.
+ */
+@font-face {
+  font-family: 'IBM Plex Sans Condensed';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../node_modules/@ibm/plex-sans-condensed/fonts/complete/woff2/IBMPlexSansCondensed-Regular.woff2')
+    format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans Condensed';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../node_modules/@ibm/plex-sans-condensed/fonts/complete/woff2/IBMPlexSansCondensed-Italic.woff2')
+    format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans Condensed';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../node_modules/@ibm/plex-sans-condensed/fonts/complete/woff2/IBMPlexSansCondensed-Medium.woff2')
+    format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../node_modules/@ibm/plex-sans-condensed/fonts/complete/woff2/IBMPlexSansCondensed-SemiBold.woff2')
+    format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../node_modules/@ibm/plex-sans-condensed/fonts/complete/woff2/IBMPlexSansCondensed-Bold.woff2')
+    format('woff2');
+}
+
+:root {
+  color-scheme: light;
+  --paper: #e8eae4;
+  --sheet: #f5f6f2;
+  --ink: #1d221f;
+  --ink-2: #4c5650;
+  --rule: #c9cdc3;
+  --pen: #25467a;
+  --mark: #f1c40f;
+  --mark-ink: #1d221f;
+  --ok: #2f7a45;
+  --warn: #a0560f;
+  --bad: #b2312a;
+  --c1: #2a78d6;
+  --c2: #eb6834;
+  --c3: #1baf7a;
+  --c0: #9aa39b;
+  --grid: #dde1d8;
+  --axis: #aab1a7;
+  --status-bar: #1d221f;
+  --f-display: 'Tektur', 'IBM Plex Sans Condensed', system-ui, sans-serif;
+  --f-body: 'IBM Plex Sans Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --f-num: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #141815;
+    --sheet: #1c211d;
+    --ink: #e3e7df;
+    --ink-2: #9aa59c;
+    --rule: #333b35;
+    --pen: #8fb0e8;
+    --mark: #e8bb12;
+    --mark-ink: #141815;
+    --ok: #6cc185;
+    --warn: #e19a4e;
+    --bad: #ef7d74;
+    --c1: #3987e5;
+    --c2: #d95926;
+    --c3: #199e70;
+    --c0: #6b746c;
+    --grid: #2b322d;
+    --axis: #48514a;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Below 16px Safari zooms the page on focus. */
+input,
+select,
+textarea {
+  font-size: max(16px, 1em);
+}
+
+:focus-visible {
+  outline: 2px solid var(--pen);
+  outline-offset: 2px;
+}
