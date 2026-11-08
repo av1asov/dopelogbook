@@ -2,11 +2,18 @@
   display: flex;
   flex-direction: column;
   height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
-/* The page runs under the translucent iOS status bar, so its colour is painted here. */
+/*
+ * The page runs under the translucent iOS status bar, so its colour is painted here.
+ * Fixed and opaque on purpose: otherwise iOS 26+ blurs the top of installed apps.
+ */
 .status-bar {
-  flex: none;
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
   height: env(safe-area-inset-top, 0px);
   background: var(--status-bar);
 }

@@ -146,15 +146,17 @@
   background: transparent;
   color: var(--ink);
   font-family: var(--f-num);
-  font-size: 26px;
+  /* Four characters between the 44 pt buttons: 24px from 360 wide, down to 17px at 320. */
+  font-size: clamp(17px, 17.5vw - 39px, 24px);
   font-weight: 800;
+  letter-spacing: -1px;
   line-height: 1;
   text-align: center;
 }
 
 .big-text {
   font-family: var(--f-num);
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
 }
 
