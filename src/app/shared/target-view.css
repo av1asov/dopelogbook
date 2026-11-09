@@ -102,21 +102,49 @@ text.number {
   stroke-width: 3;
 }
 
+.corner {
+  fill: #5aa0ff;
+  stroke: #f5f6f2;
+  stroke-width: 1.5;
+}
+
+.handle,
+.ruler {
+  stroke: #f1c40f;
+  stroke-width: 2.5;
+}
+
+.ring {
+  stroke: #f1c40f;
+  stroke-width: 2;
+}
+
+text.ruler {
+  fill: #f1c40f;
+  stroke: #1d221f;
+  stroke-width: 3;
+  paint-order: stroke;
+}
+
+.selected {
+  stroke: #f5f6f2;
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+}
+
 .loupe {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 120px;
-  height: 120px;
+  width: 96px;
+  height: 96px;
   border: 2px solid #f1c40f;
   border-radius: 50%;
   background: #0a0c0a;
   pointer-events: none;
 }
 
-.loupe.right {
-  right: 8px;
-  left: auto;
+/* The point being aimed at has to stay visible through the mark. */
+.loupe .corner {
+  fill: none;
 }
 
 .hair {

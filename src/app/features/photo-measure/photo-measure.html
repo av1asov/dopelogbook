@@ -76,13 +76,17 @@
         [markers]="markers()"
         [segments]="segments()"
         [loupe]="loupe()"
-        (tapped)="tap($event)"
-        (held)="hold($event)"
+        [full]="marksFull()"
+        (added)="added($event)"
+        (selected)="selectedMark.set($event)"
+        (moved)="moved($event)"
+        (removed)="removeMark($event)"
       />
     }
     @if (prompt(); as text) {
       <span class="prompt">{{ text }}</span>
     }
+    <app-undo-toast />
     @if (!sheetMode() && badge(); as text) {
       <span class="badge-flat">{{ text }}</span>
     }
@@ -103,7 +107,7 @@
       <span><i class="found"></i>найдено</span>
       <span><i class="manual"></i>вручную</span>
       <span><i class="mpi">×</i>СТП</span>
-      <span>касание — добавить, удержание — убрать</span>
+      <span>касание — добавить · тянуть — сдвинуть · удержание — убрать</span>
     </div>
   }
 
@@ -122,6 +126,11 @@
           </label>
           <button type="button" [disabled]="picks().length < 2" (click)="applyScale()">
             Применить
+          </button>
+        </div>
+        <div class="entry">
+          <button type="button" [disabled]="!picks().length" (click)="resetSegment()">
+            Сбросить отрезок
           </button>
           <button type="button" (click)="startMode('corners')">Углы листа</button>
         </div>
@@ -191,6 +200,12 @@
           <span class="sub">{{ offsetAngle() }}</span>
         </div>
       </section>
+    }
+
+    @if (selectedMark() != null) {
+      <div class="tools">
+        <button type="button" (click)="removeMark($any(selectedMark()))">Удалить точку</button>
+      </div>
     }
 
     <div class="tools">

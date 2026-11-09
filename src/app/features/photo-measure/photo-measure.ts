@@ -8,6 +8,7 @@ import {
   OnInit,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import {
   ammoById,
@@ -15,6 +16,7 @@ import {
   Diary,
   fmt,
   fmtAng,
+  numText,
   offText,
   parseNum,
   PhotoHole,
@@ -35,7 +37,7 @@ import {
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
 import { shrinkPhoto, turnedPhoto } from '../../core/image';
-import { DetectImage, FlatImage, MeasureResult } from '../../core/target/detect';
+import { FlatImage, MeasureResult } from '../../core/target/detect';
 import { flatUrl, readPixels, TargetDetector } from '../../core/target/detector';
 import {
   applyHomography,
@@ -63,8 +65,10 @@ import {
   turnPoint,
 } from '../../core/target/measure';
 import { issueText, Quality } from '../../core/target/quality';
-import { snapToLine } from '../../core/target/snap';
-import { Marker, Segment, TargetTap, TargetView } from '../../shared/target-view';
+import { frameCorners, sheetCorners } from '../../core/target/manual';
+import { applyMarkEvent } from '../../core/target/mark-gesture';
+import { UndoToast } from '../../shared/undo-toast';
+import { MarkMove, Marker, Segment, TargetTap, TargetView } from '../../shared/target-view';
 import { SavedTarget, TargetEditor } from '../targets/target-editor';
 import { TargetPicker } from './target-picker';
 
@@ -129,6 +133,8 @@ export function measureContext(
 }
 
 type Mode = 'holes' | 'scale' | 'corners' | 'aim' | 'cold';
+
+const SCALE_POINTS = 2;
 type Hole = PhotoHole & { doubtful?: boolean };
 type Target = Omit<PhotoTarget, 'holes'> & { holes: Hole[] };
 
@@ -146,7 +152,7 @@ const SOURCE_TEXT: Record<PhotoScale['source'], string> = {
 /** Screens 15 and 15б: finds the groups on a target photo and hands them to the series. */
 @Component({
   selector: 'app-photo-measure',
-  imports: [TargetEditor, TargetPicker, TargetView],
+  imports: [TargetEditor, TargetPicker, TargetView, UndoToast],
   templateUrl: './photo-measure.html',
   styleUrl: './photo-measure.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -170,7 +176,10 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   private readonly imageHeight = signal(0);
   protected readonly loupe = signal(false);
   protected readonly mode = signal<Mode>('holes');
-  protected readonly picks = signal<Point[]>([]);
+  protected readonly picks = signal<readonly Point[]>([]);
+  /** The mark touched last, for «Удалить точку». Its id is the same as in the markers. */
+  protected readonly selectedMark = signal<number | null>(null);
+  private readonly undo = viewChild.required(UndoToast);
   protected readonly busy = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
   protected readonly mmText = signal('25');
@@ -209,7 +218,6 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   private turns = 0;
   private saving = false;
   private generation = 0;
-  private pixels: DetectImage | null = null;
 
   protected readonly sheetMode = computed(
     () => this.targets().length > 1 || this.context().si == null,
@@ -352,12 +360,18 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     const view = this.toView();
     const list: Marker[] = [];
     const sheet = this.sheetMode();
+    const mode = this.mode();
+    const selected = this.selectedMark();
+    let id = 0;
     for (const target of this.targets()) {
       for (const hole of target.holes) {
+        const grab = mode === 'holes' ? id++ : undefined;
         list.push({
           ...view(hole),
           r: this.holeRadius(hole),
           kind: hole.cold ? 'cold' : hole.doubtful ? 'doubt' : hole.auto ? 'found' : 'manual',
+          grab,
+          selected: grab != null && grab === selected,
         });
       }
       if (target.aim) {
@@ -372,7 +386,15 @@ export class PhotoMeasure implements OnInit, OnDestroy {
       const centre = this.scale() ? meanPoint(target.holes.filter((h) => !h.cold)) : null;
       if (centre) list.push({ ...view(centre), kind: 'centre' });
     }
-    for (const pick of this.picks()) list.push({ ...view(pick), kind: 'point' });
+    this.picks().forEach((pick, grab) => {
+      list.push({
+        ...view(pick),
+        kind: mode === 'corners' ? 'corner' : 'point',
+        grab,
+        fixed: mode === 'corners',
+        selected: mode === 'scale' && grab === selected,
+      });
+    });
     return list;
   });
 
@@ -382,8 +404,10 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     const scale = this.scale();
     const flat = this.flatShown();
     if (flat && scale?.sheet) list.push(...this.sheetEdges(flat, scale.sheet));
+    const [p1, p2] = this.picks();
+    if (this.mode() === 'scale' && p1 && p2) list.push({ a: view(p1), b: view(p2), kind: 'scale' });
     if (this.sheetMode()) return list;
-    if (scale && scale.source !== 'sheet') {
+    if (scale && scale.source !== 'sheet' && this.mode() !== 'scale') {
       list.push({
         a: view(scale.p1),
         b: view(scale.p2),
@@ -456,9 +480,11 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   protected readonly prompt = computed(() => {
     switch (this.mode()) {
       case 'scale':
-        return 'Коснитесь двух делений линейки или концов отрезка известной длины';
+        return this.picks().length < 2
+          ? 'Поставьте две точки на концах отрезка известной длины'
+          : 'Тяните точки, чтобы поправить';
       case 'corners':
-        return 'Коснитесь четырёх углов листа';
+        return 'Перетащите четыре маркера на углы листа';
       case 'aim':
         return 'Коснитесь точки прицеливания';
       case 'cold':
@@ -595,7 +621,6 @@ export class PhotoMeasure implements OnInit, OnDestroy {
       if (generation !== this.generation) return;
       this.blob = blob;
       this.turns = turns;
-      this.pixels = null;
       await this.loadPhoto();
       await this.showFlat(flat);
       const turn = (p: Point): Point => turnPoint(photo, quarters, p);
@@ -676,7 +701,6 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     if (!file) return;
     this.blob = this.source = await shrinkPhoto(file);
     this.turns = 0;
-    this.pixels = null;
     await this.loadPhoto();
     this.targets.set([{ n: 1, aim: null, holes: [] }]);
     this.resetPlane();
@@ -686,20 +710,42 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   protected startMode(mode: Mode): void {
     this.mode.set(this.mode() === mode ? 'holes' : mode);
     this.picks.set([]);
-    if (mode === 'scale' || mode === 'corners') this.straight.set(false);
-    if (mode === 'corners') {
+    this.selectedMark.set(null);
+    if (this.mode() === 'scale') this.straight.set(false);
+    if (this.mode() === 'scale' && this.scale()?.source === 'manual') {
+      const scale = this.scale() as PhotoScale;
+      this.picks.set([scale.p1, scale.p2]);
+      this.mmText.set(numText(scale.mm));
+    }
+    if (this.mode() === 'corners') {
+      this.straight.set(false);
       const sheet = this.template()?.sheet ?? A4;
       this.sheetW.set(String(sheet.w));
       this.sheetH.set(String(sheet.h));
+      this.picks.set(this.startingCorners());
     }
   }
 
-  protected tap(tap: TargetTap): void {
-    const toImage = this.fromView();
-    const at = toImage(tap.at);
+  /** The sheet found on the photo, or just inside the edges of the shot. */
+  private startingCorners(): Point[] {
+    const scale = this.scale();
+    const matrix = this.matrix();
+    if (matrix && scale?.sheet) return sheetCorners(matrix, scale.sheet);
+    return frameCorners({ w: this.imageWidth(), h: this.imageHeight() });
+  }
+
+  /** There is no room for another point of the segment; corners only ever move. */
+  protected readonly marksFull = computed(() => {
+    const mode = this.mode();
+    return mode === 'corners' || (mode === 'scale' && this.picks().length >= SCALE_POINTS);
+  });
+
+  protected added(tap: TargetTap): void {
+    const at = this.fromView()(tap.at);
+    this.selectedMark.set(null);
     switch (this.mode()) {
       case 'holes':
-        this.placeHole(tap);
+        this.updateHoles(this.nearestTarget(at), (holes) => [...holes, { ...at, auto: false }]);
         break;
       case 'aim':
         this.setAim(at);
@@ -708,19 +754,65 @@ export class PhotoMeasure implements OnInit, OnDestroy {
         this.markCold(tap);
         break;
       case 'scale':
-        void this.pickScalePoint(at, tap.reach);
-        break;
-      case 'corners':
-        this.picks.update((picks) => (picks.length < 4 ? [...picks, at] : [at]));
+        this.picks.update((picks) =>
+          applyMarkEvent(picks, { type: 'add', at, reach: tap.reach }, SCALE_POINTS),
+        );
         break;
     }
   }
 
-  protected hold(tap: TargetTap): void {
-    if (this.mode() !== 'holes') return;
-    const nearest = this.nearestHole(tap.at, tap.reach);
-    if (!nearest) return;
-    this.updateHoles(nearest.target, (holes) => holes.filter((_, i) => i !== nearest.hole));
+  protected moved({ id, at }: MarkMove): void {
+    const point = this.fromView()(at);
+    if (this.mode() !== 'holes') {
+      this.picks.update((picks) => applyMarkEvent(picks, { type: 'move', id, at: point }, 4));
+      return;
+    }
+    const found = this.holeById(id);
+    if (!found) return;
+    this.updateHoles(found.target, (holes) =>
+      holes.map((hole, i) => (i === found.hole ? { ...hole, ...point, auto: false } : hole)),
+    );
+  }
+
+  protected removeMark(id: number): void {
+    this.selectedMark.set(null);
+    if (this.mode() === 'holes') {
+      const found = this.holeById(id);
+      if (!found) return;
+      const { target, hole } = found;
+      const removed = this.targets()[target].holes[hole];
+      this.updateHoles(target, (holes) => holes.filter((_, i) => i !== hole));
+      this.undo().show('Убрано', () =>
+        this.updateHoles(target, (holes) => [
+          ...holes.slice(0, hole),
+          removed,
+          ...holes.slice(hole),
+        ]),
+      );
+    } else if (this.mode() === 'scale') {
+      const removed = this.picks()[id];
+      this.picks.update((list) => applyMarkEvent(list, { type: 'remove', id }, SCALE_POINTS));
+      this.undo().show('Убрано', () => {
+        if (this.mode() !== 'scale' || this.picks().length >= SCALE_POINTS) return;
+        this.picks.update((list) => [...list.slice(0, id), removed, ...list.slice(id)]);
+      });
+    }
+  }
+
+  protected resetSegment(): void {
+    this.picks.set([]);
+    this.selectedMark.set(null);
+  }
+
+  /** The id of a hole counts the holes of all the targets in a row. */
+  private holeById(id: number): { target: number; hole: number } | null {
+    let rest = id;
+    const targets = this.targets();
+    for (let target = 0; target < targets.length; target++) {
+      if (rest < targets[target].holes.length) return { target, hole: rest };
+      rest -= targets[target].holes.length;
+    }
+    return null;
   }
 
   private updateHoles(index: number, change: (holes: Hole[]) => Hole[]): void {
@@ -813,18 +905,6 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     return index;
   }
 
-  private placeHole({ at, from, reach }: TargetTap): void {
-    const point = this.fromView()(at);
-    const moving = this.loupe() ? this.nearestHole(from, reach) : null;
-    if (moving) {
-      this.updateHoles(moving.target, (holes) =>
-        holes.map((hole, i) => (i === moving.hole ? { ...hole, ...point, auto: false } : hole)),
-      );
-      return;
-    }
-    this.updateHoles(this.nearestTarget(point), (holes) => [...holes, { ...point, auto: false }]);
-  }
-
   private markCold({ at, reach }: TargetTap): void {
     const nearest = this.nearestHole(at, reach);
     if (!nearest) return;
@@ -852,12 +932,6 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     return found;
   }
 
-  private async pickScalePoint(at: Point, reach: number): Promise<void> {
-    if (!this.pixels) this.pixels = await readPixels(this.blob as Blob);
-    const snapped = snapToLine(this.pixels, at, reach);
-    this.picks.update((picks) => (picks.length < 2 ? [...picks, snapped] : [snapped]));
-  }
-
   protected applyScale(): void {
     const [p1, p2] = this.picks();
     const mm = parseNum(this.mmText());
@@ -866,7 +940,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   }
 
   protected applyCorners(): void {
-    const picks = this.picks();
+    const picks = [...this.picks()];
     let w = parseNum(this.sheetW());
     let h = parseNum(this.sheetH());
     if (picks.length !== 4 || !w || !h || w <= 0 || h <= 0) return;
@@ -886,6 +960,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     this.scaleLocked.set(true);
     this.scaleOrigin.set('вручную');
     this.picks.set([]);
+    this.selectedMark.set(null);
     this.mode.set('holes');
     this.straight.set(!!matrix);
     void this.showFlat(null);

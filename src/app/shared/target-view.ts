@@ -13,9 +13,21 @@ import {
   viewChild,
 } from '@angular/core';
 import { Point } from '../core/ballistics';
+import { Grabbable, HOLD_MS, MarkEvent, MarkGesture } from '../core/target/mark-gesture';
 
 export type MarkerKind =
-  'found' | 'manual' | 'doubt' | 'cold' | 'aim' | 'point' | 'centre' | 'frame' | 'number';
+  | 'found'
+  | 'manual'
+  | 'doubt'
+  | 'cold'
+  | 'aim'
+  | 'point'
+  | 'centre'
+  | 'frame'
+  | 'number'
+  | 'corner'
+  | 'handle'
+  | 'ring';
 
 export interface Marker extends Point {
   kind: MarkerKind;
@@ -23,31 +35,38 @@ export interface Marker extends Point {
   r?: number;
   /** The digit of a `number` marker. */
   label?: string;
+  /** Set on a mark a finger can take hold of; the events tell which one by this id. */
+  grab?: number;
+  /** Can be dragged but not taken away by holding. */
+  fixed?: boolean;
+  selected?: boolean;
 }
 
 export interface Segment {
   a: Point;
   b: Point;
-  kind: 'scale' | 'spread' | 'offset' | 'edge';
+  kind: 'scale' | 'ruler' | 'spread' | 'offset' | 'edge';
   label?: string;
 }
 
 export interface TargetTap {
   at: Point;
-  /** Where the finger came down: with the loupe the two differ. */
-  from: Point;
   /** How far from a mark a touch still means that mark, in image pixels. */
   reach: number;
 }
 
-const HOLD_MS = 500;
-const MOVE_PX = 10;
-const REACH_PX = 24;
-const LOUPE_PX = 120;
-const LOUPE_ZOOM = 4;
+export interface MarkMove {
+  id: number;
+  at: Point;
+}
+
+const LOUPE_PX = 96;
+const LOUPE_ZOOM = 3;
+const LOUPE_GAP = 28;
+const LOUPE_MARGIN = 4;
 const MAX_ZOOM = 10;
 
-/** A photo with marks on top: one finger marks, two fingers pinch and pan. */
+/** A photo with marks on top: one finger marks, two fingers pinch and pan. See mark-gesture. */
 @Component({
   selector: 'app-target-view',
   template: `
@@ -75,6 +94,7 @@ const MAX_ZOOM = 10;
         />
         @if (s.label; as label) {
           <text
+            [class.ruler]="s.kind === 'ruler'"
             [attr.x]="(s.a.x + s.b.x) / 2"
             [attr.y]="(s.a.y + s.b.y) / 2 - unit() * 8"
             [attr.font-size]="unit() * 13"
@@ -83,7 +103,7 @@ const MAX_ZOOM = 10;
           </text>
         }
       }
-      @for (m of markers(); track $index) {
+      @for (m of shown(); track $index) {
         @switch (m.kind) {
           @case ('aim') {
             <circle class="aim" [attr.cx]="m.x" [attr.cy]="m.y" [attr.r]="unit() * 13" />
@@ -115,16 +135,33 @@ const MAX_ZOOM = 10;
             />
           }
         }
+        @if (m.selected) {
+          <circle
+            class="selected"
+            [attr.cx]="m.x"
+            [attr.cy]="m.y"
+            [attr.r]="(m.r ?? unit() * 9) + unit() * 6"
+          />
+        }
       }
     </svg>
     @if (loupeAt(); as at) {
       <svg
         class="loupe"
-        [class.right]="loupeRight()"
+        [style.left.px]="loupeLeft()"
+        [style.top.px]="loupeTop()"
         [attr.viewBox]="loupeBox()"
         aria-hidden="true"
       >
         <image [attr.href]="src()" [attr.width]="width()" [attr.height]="height()" />
+        @if (draggedMark(); as m) {
+          <circle
+            [attr.class]="m.kind"
+            [attr.cx]="at.x"
+            [attr.cy]="at.y"
+            [attr.r]="m.r ?? unit() * 5"
+          />
+        }
         <path class="hair" [attr.d]="hair(at)" />
       </svg>
     }
@@ -141,12 +178,18 @@ export class TargetView {
   readonly height = input.required<number>();
   readonly markers = input<readonly Marker[]>([]);
   readonly segments = input<readonly Segment[]>([]);
+  /** The loupe is switched on for marks being placed; a dragged mark always gets it. */
   readonly loupe = input(false);
+  /** No room for another mark: a touch on empty space asks `refused`. */
+  readonly full = input(false);
   /** Width over height of the frame. */
   readonly aspect = input(1);
 
-  readonly tapped = output<TargetTap>();
-  readonly held = output<TargetTap>();
+  readonly added = output<TargetTap>();
+  readonly refused = output<void>();
+  readonly selected = output<number>();
+  readonly moved = output<MarkMove>();
+  readonly removed = output<number>();
 
   /** The width of the view that shows the whole picture. */
   private readonly side = computed(() => Math.max(this.width(), this.height() * this.aspect()));
@@ -161,8 +204,19 @@ export class TargetView {
     return `${cx - s / 2} ${cy - tall / 2} ${s} ${tall}`;
   });
 
+  private readonly draggedId = signal<number | null>(null);
+  /** The dragged mark is drawn in the loupe: under the finger it could not be seen anyway. */
+  protected readonly shown = computed(() => {
+    const dragged = this.draggedId();
+    return dragged == null ? this.markers() : this.markers().filter((m) => m.grab !== dragged);
+  });
+  protected readonly draggedMark = computed(
+    () => this.markers().find((m) => m.grab != null && m.grab === this.draggedId()) ?? null,
+  );
+
   protected readonly loupeAt = signal<Point | null>(null);
-  protected readonly loupeRight = signal(false);
+  protected readonly loupeLeft = signal(0);
+  protected readonly loupeTop = signal(0);
   private readonly loupeSide = computed(() => (LOUPE_PX * this.unit()) / LOUPE_ZOOM);
   protected readonly loupeBox = computed(() => {
     const at = this.loupeAt() as Point;
@@ -171,8 +225,7 @@ export class TargetView {
   });
 
   private readonly pointers = new Map<number, { x: number; y: number }>();
-  private touch: { startX: number; startY: number; from: Point; at: Point; moved: boolean } | null =
-    null;
+  private gesture: MarkGesture | null = null;
   private pinch: { gap: number; mid: Point; view: { cx: number; cy: number; s: number } } | null =
     null;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -221,23 +274,33 @@ export class TargetView {
     this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     clearTimeout(this.timer);
     if (this.pointers.size === 2) {
-      this.touch = null;
-      this.loupeAt.set(null);
+      this.endGesture();
       this.startPinch();
       return;
     }
     if (this.pointers.size > 2) return;
-    const from = this.toImage(event.clientX, event.clientY);
-    this.touch = { startX: event.clientX, startY: event.clientY, from, at: from, moved: false };
-    if (this.loupe()) {
-      this.showLoupe(from, event.clientX);
-      return;
+    const grabbable = this.markers().flatMap((m): Grabbable[] =>
+      m.grab == null ? [] : [{ x: m.x, y: m.y, id: m.grab, fixed: m.fixed }],
+    );
+    const gesture = new MarkGesture(
+      grabbable,
+      this.toImage(event.clientX, event.clientY),
+      this.unit(),
+      event.timeStamp,
+      {
+        full: this.full(),
+        aiming: this.loupe(),
+        bounds: { w: this.width(), h: this.height() },
+      },
+    );
+    this.gesture = gesture;
+    this.showLoupe(event);
+    if (gesture.holdable) {
+      this.timer = setTimeout(() => {
+        this.emit(gesture.hold());
+        this.endGesture();
+      }, HOLD_MS);
     }
-    this.timer = setTimeout(() => {
-      if (!this.touch || this.touch.moved) return;
-      this.held.emit(this.tap(this.touch));
-      this.touch = null;
-    }, HOLD_MS);
   }
 
   protected move(event: PointerEvent): void {
@@ -247,14 +310,14 @@ export class TargetView {
       this.updatePinch();
       return;
     }
-    const touch = this.touch;
-    if (!touch) return;
-    if (Math.hypot(event.clientX - touch.startX, event.clientY - touch.startY) > MOVE_PX) {
-      touch.moved = true;
-      clearTimeout(this.timer);
-    }
-    touch.at = this.toImage(event.clientX, event.clientY);
-    if (this.loupe()) this.showLoupe(touch.at, event.clientX);
+    const gesture = this.gesture;
+    if (!gesture) return;
+    const at = this.toImage(event.clientX, event.clientY);
+    const change = gesture.move(at, event.timeStamp);
+    if (gesture.draggedId != null) clearTimeout(this.timer);
+    this.draggedId.set(gesture.draggedId);
+    this.emit(change);
+    this.showLoupe(event);
   }
 
   protected up(event: PointerEvent): void {
@@ -264,28 +327,56 @@ export class TargetView {
       if (this.pointers.size < 2) this.pinch = null;
       return;
     }
-    const touch = this.touch;
-    this.touch = null;
-    this.loupeAt.set(null);
-    if (touch && (!touch.moved || this.loupe())) this.tapped.emit(this.tap(touch));
+    const gesture = this.gesture;
+    this.endGesture();
+    if (gesture) this.emit(gesture.up());
   }
 
   protected cancel(event: PointerEvent): void {
     this.pointers.delete(event.pointerId);
     clearTimeout(this.timer);
-    this.touch = null;
+    this.endGesture();
     this.pinch = null;
+  }
+
+  private endGesture(): void {
+    this.gesture = null;
+    this.draggedId.set(null);
     this.loupeAt.set(null);
   }
 
-  private tap({ at, from }: { at: Point; from: Point }): TargetTap {
-    return { at, from, reach: REACH_PX * this.unit() };
+  private emit(event: MarkEvent | null): void {
+    switch (event?.type) {
+      case 'add':
+        this.added.emit({ at: event.at, reach: event.reach });
+        break;
+      case 'refuse':
+        this.refused.emit();
+        break;
+      case 'select':
+        this.selected.emit(event.id);
+        break;
+      case 'move':
+        this.moved.emit({ id: event.id, at: event.at });
+        break;
+      case 'remove':
+        this.removed.emit(event.id);
+        break;
+    }
   }
 
-  private showLoupe(at: Point, clientX: number): void {
-    const box = this.svg().nativeElement.getBoundingClientRect();
-    this.loupeRight.set(clientX < box.left + box.width / 2);
+  /** Above the finger, or below it when there is no room above. */
+  private showLoupe(event: PointerEvent): void {
+    const at = this.gesture?.lens ?? null;
     this.loupeAt.set(at);
+    if (!at) return;
+    const box = this.svg().nativeElement.getBoundingClientRect();
+    const [x, y] = [event.clientX - box.left, event.clientY - box.top];
+    const above = y - LOUPE_GAP - LOUPE_PX;
+    this.loupeLeft.set(
+      Math.min(box.width - LOUPE_PX - LOUPE_MARGIN, Math.max(LOUPE_MARGIN, x - LOUPE_PX / 2)),
+    );
+    this.loupeTop.set(above >= LOUPE_MARGIN ? above : y + LOUPE_GAP);
   }
 
   private fingers(): { gap: number; x: number; y: number } {

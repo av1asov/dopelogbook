@@ -72,6 +72,12 @@
       <input type="file" accept="image/*" hidden (change)="choosePhoto($event)" />
     </label>
 
+    @if (src()) {
+      <button type="button" class="btn by-hand" (click)="manualOpen.set(true)">
+        Разметить вручную: углы, масштаб, мишени
+      </button>
+    }
+
     <label class="field">Название<input formControlName="name" /></label>
 
     <div class="field">
@@ -322,3 +328,21 @@
     }
   </form>
 </div>
+
+@if (manualOpen() && blob(); as photo) {
+  <app-target-manual
+    [photo]="photo"
+    [photoSrc]="src() ?? ''"
+    [imageSize]="imageSize()"
+    [sheet]="sheet()"
+    [plane]="foundPlane()"
+    [flat]="flat()"
+    [flatSrc]="flatSrc()"
+    [count]="placeCount()"
+    [elementMm]="elementSize()"
+    [element]="manualElement()"
+    [marks]="manualMarks()"
+    (done)="applyManual($event)"
+    (closed)="manualOpen.set(false)"
+  />
+}

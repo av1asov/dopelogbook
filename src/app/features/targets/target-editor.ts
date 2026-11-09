@@ -18,6 +18,7 @@ import {
   parseNum,
   Point,
   Polarity,
+  ScaleSource,
   SheetSize,
   TargetReference,
   TargetRing,
@@ -28,6 +29,8 @@ import { DiaryStore } from '../../core/data/diary-store';
 import { shrinkPhoto, turnedPhoto } from '../../core/image';
 import { FlatImage, SurveyResult } from '../../core/target/detect';
 import { flatUrl, readPixels, TargetDetector } from '../../core/target/detector';
+import { orderCorners } from '../../core/target/homography';
+import { ManualElement, ManualMarks, turnManual } from '../../core/target/manual';
 import {
   photosWithTemplate,
   referenceText,
@@ -41,6 +44,7 @@ import { issueText } from '../../core/target/quality';
 import { SignedInput } from '../../shared/signed-input';
 import { TargetPreview } from '../../shared/target-preview';
 import { Marker, TargetView } from '../../shared/target-view';
+import { ManualDone, TargetManual } from './target-manual';
 
 type Kind = TargetReference['kind'];
 type Order = 'rows' | 'columns' | 'printed';
@@ -144,7 +148,7 @@ export interface SavedTarget {
 /** Screen 16: a template, proposed from a photo of a blank sheet or filled in by hand. */
 @Component({
   selector: 'app-target-editor',
-  imports: [ReactiveFormsModule, SignedInput, TargetPreview, TargetView],
+  imports: [ReactiveFormsModule, SignedInput, TargetManual, TargetPreview, TargetView],
   templateUrl: './target-editor.html',
   styleUrl: './target-editor.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -196,7 +200,7 @@ export class TargetEditor implements OnInit, OnDestroy {
   protected readonly src = signal<string | null>(null);
   protected readonly flat = signal<FlatImage | null>(null);
   protected readonly flatSrc = signal<string | null>(null);
-  private readonly imageSize = signal({ w: 0, h: 0 });
+  protected readonly imageSize = signal({ w: 0, h: 0 });
   protected readonly straight = signal(true);
   protected readonly busy = signal<string | null>(null);
   private readonly survey = signal<SurveyResult | null>(null);
@@ -204,6 +208,20 @@ export class TargetEditor implements OnInit, OnDestroy {
   private source: Blob | undefined;
   private turns = 0;
   private generation = 0;
+  private readonly surveyFailed = signal(false);
+  protected readonly manualOpen = signal(false);
+  protected readonly manualMarks = signal<ManualMarks | null>(null);
+  private readonly scaleSource = signal<ScaleSource | undefined>(undefined);
+  protected readonly foundPlane = computed(() => this.survey()?.plane ?? null);
+  protected readonly placeCount = computed(() => this.places().length);
+  protected readonly manualElement = computed((): ManualElement =>
+    this.value().kind === 'square' ? 'square' : 'circle',
+  );
+  protected readonly elementSize = computed(() => {
+    const reference = this.reference();
+    if (reference?.kind === 'square' || reference?.kind === 'circle') return reference.size;
+    return reference?.kind === 'rings' ? Math.max(...reference.diameters) : null;
+  });
   protected readonly confirmingDelete = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -216,7 +234,7 @@ export class TargetEditor implements OnInit, OnDestroy {
     return existing ? photosWithTemplate(this.store.diary().sessions, existing.id) : 0;
   });
 
-  private readonly sheet = computed((): SheetSize => {
+  protected readonly sheet = computed((): SheetSize => {
     const { sheetW, sheetH } = this.value();
     return { w: parseNum(sheetW) ?? 0, h: parseNum(sheetH) ?? 0 };
   });
@@ -313,6 +331,7 @@ export class TargetEditor implements OnInit, OnDestroy {
   });
 
   protected readonly statusText = computed(() => {
+    if (this.manualMarks()) return 'Размечено вручную';
     const result = this.survey();
     if (!result?.plane || !result.quality) return null;
     const by = result.plane.scale.source === 'sheet' ? 'по 4 углам листа' : 'по карте';
@@ -322,20 +341,22 @@ export class TargetEditor implements OnInit, OnDestroy {
 
   /** Mistakes here would reach every future photo, so a doubtful shot is not accepted. */
   protected readonly problem = computed(() => {
-    if (!this.blob() || this.busy()) return null;
+    if (!this.blob() || this.busy() || this.manualMarks()) return null;
     const result = this.survey();
     if (!result) return null;
     if (!result.plane) {
-      return 'Не видно углов листа и нет карты в кадре. Снимите так, чтобы были видны 4 угла, или положите банковскую карту.';
+      return 'Не видно углов листа и нет карты в кадре. Снимите так, чтобы были видны 4 угла, положите банковскую карту или разметьте вручную.';
     }
     const [issue] = result.quality?.issues ?? [];
     if (issue) return issueText(issue);
-    return result.targets ? null : 'Мишени на листе не найдены. Задайте их ниже или переснимите.';
+    return result.targets ? null : 'Мишени на листе не найдены. Разметьте вручную или переснимите.';
   });
 
+  /** What was marked by hand is the person's own call; the checks are for the autosearch. */
   private readonly blocked = computed(() => {
+    if (!this.blob() || this.surveyFailed() || this.manualMarks()) return false;
     const result = this.survey();
-    return !!this.blob() && (!result?.plane || !!result.quality?.issues.length);
+    return !result?.plane || !!result.quality?.issues.length;
   });
 
   ngOnInit(): void {
@@ -364,6 +385,7 @@ export class TargetEditor implements OnInit, OnDestroy {
     });
     if (reference) this.applyReference(reference);
     this.order.set(source.numbering === 'printed' ? 'printed' : 'rows');
+    this.scaleSource.set(source.scale?.source);
     this.places.set([...source.targets].sort((a, b) => a.n - b.n).map(({ x, y }) => ({ x, y })));
     this.syncPreset();
   }
@@ -486,6 +508,7 @@ export class TargetEditor implements OnInit, OnDestroy {
       this.showPhoto(blob, { w: photo.h, h: photo.w });
       await this.showFlat(flat);
       if (found) this.survey.set({ ...found, plane, flat });
+      this.manualMarks.update((marks) => marks && turnManual(marks, photo, quarters));
       this.turnLayout(quarters);
     } catch {
       if (generation === this.generation) this.error.set('Не удалось повернуть снимок.');
@@ -517,6 +540,9 @@ export class TargetEditor implements OnInit, OnDestroy {
     this.generation++;
     this.busy.set('Ищу лист и мишени…');
     this.error.set(null);
+    this.surveyFailed.set(false);
+    this.manualMarks.set(null);
+    this.scaleSource.set(undefined);
     try {
       const result = await this.detector.survey({
         kind: 'survey',
@@ -527,8 +553,8 @@ export class TargetEditor implements OnInit, OnDestroy {
       await this.showFlat(result.flat);
       this.adopt(result);
     } catch {
-      this.error.set('Автопоиск недоступен — задайте мишени вручную.');
-      this.blob.set(null);
+      this.error.set('Автопоиск недоступен — разметьте вручную.');
+      this.surveyFailed.set(true);
     } finally {
       this.busy.set(null);
     }
@@ -552,6 +578,43 @@ export class TargetEditor implements OnInit, OnDestroy {
     this.places.set(targets.map(({ x, y }) => ({ x, y })));
   }
 
+  /** Whatever was left unmarked by hand stays as the autosearch found it. */
+  protected async applyManual(result: ManualDone): Promise<void> {
+    const { marks, plane, flat, layout, scaled } = result;
+    const hadAim = !!this.manualMarks()?.aim;
+    this.manualOpen.set(false);
+    this.manualMarks.set(marks);
+    if (plane && marks.corners) {
+      const [p1, p2] = orderCorners(marks.corners);
+      const { sheet, matrix: homography } = plane;
+      this.form.patchValue({ sheetW: numText(sheet.w), sheetH: numText(sheet.h) });
+      this.syncPreset();
+      this.survey.update((found) => ({
+        plane: { scale: { source: 'sheet', p1, p2, mm: sheet.w, sheet }, homography },
+        flat: flat ?? found?.flat ?? null,
+        quality: null,
+        sheet,
+        targets: found?.targets ?? null,
+      }));
+      if (flat) await this.showFlat(flat);
+    }
+    if (layout.places) {
+      this.places.set(layout.places);
+      this.order.set('printed');
+    }
+    if (layout.element) {
+      this.form.patchValue({ kind: layout.element.kind, size: numText(layout.element.size) });
+    }
+    if (layout.aim || hadAim) {
+      this.form.patchValue({
+        aimUp: numText(layout.aim?.up ?? 0),
+        aimRight: numText(layout.aim?.right ?? 0),
+      });
+    }
+    if (scaled) this.scaleSource.set('manual');
+    else if (plane) this.scaleSource.set('sheet');
+  }
+
   protected cancel(): void {
     if (this.overlay()) this.closed.emit();
     else void this.router.navigate(['/more/targets']);
@@ -569,7 +632,9 @@ export class TargetEditor implements OnInit, OnDestroy {
       return;
     }
     if (this.blocked()) {
-      this.error.set('Переснимите лист: по такому снимку шаблон будет неточным.');
+      this.error.set(
+        'Переснимите лист или разметьте вручную: по такому снимку шаблон будет неточным.',
+      );
       return;
     }
     const existing = this.existing();
@@ -581,6 +646,7 @@ export class TargetEditor implements OnInit, OnDestroy {
       ...(artSize ? { artSize } : {}),
       targets,
       ...(this.order() === 'printed' ? { numbering: 'printed' as const } : {}),
+      ...(this.scaleSource() ? { scale: { source: this.scaleSource() as ScaleSource } } : {}),
     });
     if (this.overlay()) {
       // After «Переснять» the turns belong to another shot.

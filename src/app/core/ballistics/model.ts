@@ -213,6 +213,8 @@ export interface TargetTemplate extends Doc {
   targets: TemplateTarget[];
   /** Numbers follow the print rather than the order of the targets on the photo. */
   numbering?: 'printed';
+  /** How the sizes were measured, when that was done on screen 16b. */
+  scale?: { source: ScaleSource };
 }
 
 export interface Session extends Doc {
