@@ -1,0 +1,223 @@
+<div class="measure" role="dialog" aria-label="Разметка мишени">
+  <header>
+    <button type="button" class="text" (click)="closed.emit()">Отмена</button>
+    <span class="title">
+      <b>{{ sheetMode() ? context().sheetTitle : context().title }}</b>
+      <span>{{ sheetMode() ? context().sheetSubtitle : context().subtitle }}</span>
+    </span>
+    <button
+      type="button"
+      class="icon"
+      aria-label="Лупа"
+      [attr.aria-pressed]="loupe()"
+      (click)="loupe.set(!loupe())"
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="10" cy="10" r="6.5" />
+        <path d="M15 15l6 6M10 7v6M7 10h6" />
+      </svg>
+    </button>
+  </header>
+
+  @if (!sheetMode()) {
+    <ol class="steps" aria-label="Шаги разметки">
+      @for (step of steps(); track step.title) {
+        <li [class.done]="step.state === 'done'">
+          <b>{{ step.title }}</b>
+          <br />
+          {{ step.text }}
+        </li>
+      }
+    </ol>
+  }
+
+  <div class="bar">
+    <button type="button" class="target-chip" (click)="pickerOpen.set(true)">
+      Мишень: {{ template()?.name ?? 'без шаблона' }} ▾
+    </button>
+    @if (canStraighten()) {
+      <span class="view-seg">
+        <button type="button" [attr.aria-pressed]="straight()" (click)="straight.set(true)">
+          Ровно
+        </button>
+        <button type="button" [attr.aria-pressed]="!straight()" (click)="straight.set(false)">
+          Оригинал
+        </button>
+      </span>
+    }
+    @if (sheetMode() && status(); as line) {
+      <span class="status">{{ line }}</span>
+    }
+  </div>
+
+  <div class="stage" [class.portrait]="sheetMode() && portrait()">
+    @if (viewSrc(); as url) {
+      <app-target-view
+        [src]="url"
+        [width]="viewWidth()"
+        [height]="viewHeight()"
+        [aspect]="viewAspect()"
+        [markers]="markers()"
+        [segments]="segments()"
+        [loupe]="loupe()"
+        (tapped)="tap($event)"
+        (held)="hold($event)"
+      />
+    }
+    @if (prompt(); as text) {
+      <span class="prompt">{{ text }}</span>
+    }
+    @if (!sheetMode() && badge(); as text) {
+      <span class="badge-flat">{{ text }}</span>
+    }
+  </div>
+
+  @if (issue(); as text) {
+    <div class="issue">
+      <span>{{ text }}</span>
+      <label>
+        Переснять
+        <input type="file" accept="image/*" hidden (change)="retake($event)" />
+      </label>
+    </div>
+  }
+
+  @if (!sheetMode()) {
+    <div class="legend">
+      <span><i class="found"></i>найдено</span>
+      <span><i class="manual"></i>вручную</span>
+      <span><i class="mpi">×</i>СТП</span>
+      <span>касание — добавить, удержание — убрать</span>
+    </div>
+  }
+
+  <main>
+    @switch (mode()) {
+      @case ('scale') {
+        <div class="entry">
+          <label>
+            Длина, мм
+            <input
+              inputmode="decimal"
+              autocomplete="off"
+              [value]="mmText()"
+              (input)="mmText.set($any($event.target).value)"
+            />
+          </label>
+          <button type="button" [disabled]="picks().length < 2" (click)="applyScale()">
+            Применить
+          </button>
+          <button type="button" (click)="startMode('corners')">Углы листа</button>
+        </div>
+      }
+      @case ('corners') {
+        <div class="entry">
+          <label>
+            Ширина, мм
+            <input
+              inputmode="decimal"
+              autocomplete="off"
+              [value]="sheetW()"
+              (input)="sheetW.set($any($event.target).value)"
+            />
+          </label>
+          <label>
+            Высота, мм
+            <input
+              inputmode="decimal"
+              autocomplete="off"
+              [value]="sheetH()"
+              (input)="sheetH.set($any($event.target).value)"
+            />
+          </label>
+          <button type="button" [disabled]="picks().length < 4" (click)="applyCorners()">
+            Применить
+          </button>
+        </div>
+      }
+    }
+
+    @if (sheetMode()) {
+      <div class="rows">
+        @for (row of rows(); track row.n) {
+          <b [class.idle]="row.empty">{{ row.n }}</b>
+          @if (row.empty) {
+            <span class="idle">пробоин нет</span>
+            <span></span>
+          } @else {
+            <select
+              [attr.aria-label]="'Серия для мишени ' + row.n"
+              (change)="setSeries(row.n, $event)"
+            >
+              @if (row.si == null) {
+                <option value="" selected disabled>нет серии</option>
+              }
+              @for (option of context().series; track option.si) {
+                <option [value]="option.si" [selected]="option.si === row.si">
+                  → {{ option.label }}
+                </option>
+              }
+            </select>
+            <span class="num">{{ row.text }}</span>
+          }
+        }
+      </div>
+    } @else {
+      <section class="results">
+        <div>
+          <span>Группа</span>
+          <b>{{ groupText() }}</b>
+          <span class="sub">{{ groupAngle() }}</span>
+        </div>
+        <div>
+          <span>СТП</span>
+          <b>{{ offsetText() }}</b>
+          <span class="sub">{{ offsetAngle() }}</span>
+        </div>
+      </section>
+    }
+
+    <div class="tools">
+      <button
+        type="button"
+        [attr.aria-pressed]="mode() === 'scale' || mode() === 'corners'"
+        (click)="startMode('scale')"
+      >
+        Масштаб вручную
+      </button>
+      <button type="button" [attr.aria-pressed]="mode() === 'aim'" (click)="startMode('aim')">
+        Точку прицеливания
+      </button>
+      @if (context().allowCold && !sheetMode()) {
+        <button type="button" [attr.aria-pressed]="mode() === 'cold'" (click)="startMode('cold')">
+          Холодный
+        </button>
+      }
+    </div>
+
+    <button type="button" class="apply" [disabled]="!canApply()" (click)="submit()">
+      {{ applyLabel() }}
+    </button>
+  </main>
+</div>
+
+@if (pickerOpen()) {
+  <app-target-picker
+    [templates]="targetsList()"
+    [selected]="targetId()"
+    [lastUsed]="lastUsed()"
+    [similar]="similar()"
+    (chosen)="chooseTarget($event)"
+    (create)="newTemplate()"
+    (closed)="pickerOpen.set(false)"
+  />
+}
+
+@if (creating(); as photo) {
+  <app-target-editor
+    [photo]="photo"
+    [overlay]="true"
+    (saved)="templateSaved($event)"
+    (closed)="creating.set(null)"
+  />
+}

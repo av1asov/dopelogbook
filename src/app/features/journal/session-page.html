@@ -98,7 +98,7 @@
                 type="button"
                 class="thumb"
                 [attr.aria-label]="'Фото мишени серии ' + row.number"
-                (click)="viewing.set(photo.id)"
+                (click)="measure(photo, row.si, row.number)"
               >
                 <app-photo [photoId]="photo.id" />
               </button>
@@ -120,7 +120,7 @@
               type="button"
               class="thumb"
               aria-label="Фото мишени"
-              (click)="viewing.set(photo.id)"
+              (click)="openGeneral(photo)"
             >
               <app-photo [photoId]="photo.id" />
             </button>
@@ -160,6 +160,16 @@
     <a routerLink="/journal" class="back">‹ Журнал</a>
     <p class="hint">Такой записи нет.</p>
   </div>
+}
+
+@if (measuring(); as m) {
+  <app-photo-measure
+    [photoId]="m.photo.id"
+    [context]="m.context"
+    [marks]="m.photo.marks"
+    (applied)="applyMeasure($event)"
+    (closed)="measuring.set(null)"
+  />
 }
 
 @if (viewing(); as photoId) {

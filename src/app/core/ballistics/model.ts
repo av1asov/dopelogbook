@@ -123,9 +123,84 @@ export interface ZeroingPlan {
   scopeId: string;
 }
 
+/** A position on a photo, in the pixels of the original image. */
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface SheetSize {
+  w: number;
+  h: number;
+}
+
+export interface PhotoHole extends Point {
+  /** Found by the automatic search rather than placed by hand. */
+  auto: boolean;
+  /** The first shot from a cold barrel: stays out of the group. */
+  cold?: boolean;
+}
+
+/** Where the scale came from, most reliable first. */
+export type ScaleSource = 'sheet' | 'element' | 'card' | 'manual';
+
+export interface PhotoScale {
+  source: ScaleSource;
+  p1: Point;
+  p2: Point;
+  mm: number;
+  /** The size of the rectified sheet, when the source is the sheet. */
+  sheet?: SheetSize;
+}
+
+/** One target on the photo; a sheet can hold several. */
+export interface PhotoTarget {
+  n: number;
+  /** The series this target went to; on a one-target photo that is the `si` of the photo. */
+  si?: number;
+  aim?: Point | null;
+  holes: PhotoHole[];
+}
+
+/** What was measured on a target photo; enough to reopen it and recalculate. */
+export interface PhotoMarks {
+  templateId?: string;
+  scale: PhotoScale;
+  /** From image pixels to millimetres on the rectified plane, row by row. */
+  homography?: number[];
+  targets: PhotoTarget[];
+}
+
 export interface PhotoRef {
   id: string;
+  /** Absent on a sheet of several targets: their series are in `marks.targets`. */
   si?: number;
+  marks?: PhotoMarks;
+}
+
+/** The printed element a target is recognised by, in mm. */
+export type TargetReference =
+  | { kind: 'square'; size: number }
+  | { kind: 'circle'; size: number }
+  | { kind: 'grid'; step: number }
+  | { kind: 'rings'; diameters: number[] };
+
+export interface TemplateTarget {
+  n: number;
+  /** Centre of the reference, mm from the top left corner of the sheet. */
+  x: number;
+  y: number;
+  reference: TargetReference;
+  /** Point of aim from the centre of the reference, mm. */
+  aim?: { up: number; right: number } | null;
+}
+
+export interface TargetTemplate extends Doc {
+  name: string;
+  sheet: SheetSize;
+  targets: TemplateTarget[];
+  /** Ships with the app: cannot be edited or deleted. */
+  builtin?: boolean;
 }
 
 export interface Session extends Doc {

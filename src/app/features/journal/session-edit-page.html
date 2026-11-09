@@ -267,13 +267,21 @@
     @for (photo of photos(); track photo.id; let i = $index) {
       <div class="photo-row">
         <app-photo class="thumb" [photoId]="photo.id" />
-        <select class="input" aria-label="К чему относится мишень" (change)="linkPhoto(i, $event)">
-          @for (option of photoOptions(); track option.value) {
-            <option [value]="option.value" [selected]="option.value === photoValue(photo)">
-              {{ option.label }}
-            </option>
-          }
-        </select>
+        @if (sheetSeries(photo); as text) {
+          <span class="input sheet-link">{{ text }}</span>
+        } @else {
+          <select
+            class="input"
+            aria-label="К чему относится мишень"
+            (change)="linkPhoto(i, $event)"
+          >
+            @for (option of photoOptions(); track option.value) {
+              <option [value]="option.value" [selected]="option.value === photoValue(photo)">
+                {{ option.label }}
+              </option>
+            }
+          </select>
+        }
         <button type="button" class="remove" aria-label="Убрать фото" (click)="removePhoto(i)">
           ✕
         </button>

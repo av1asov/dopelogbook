@@ -29,6 +29,7 @@ import {
   numText,
   offText,
   parseNum,
+  PhotoRef,
   plural,
   rifleById,
   scopeById,
@@ -51,6 +52,8 @@ import { DiaryStore } from '../../core/data/diary-store';
 import { compact } from '../../core/data/legacy';
 import { SettingsStore } from '../../core/data/settings-store';
 import { shrinkPhoto } from '../../core/image';
+import { withMeasurement } from '../../core/target/measure';
+import { MeasureApplied, measureContext, PhotoMeasure } from '../photo-measure/photo-measure';
 import { SignedInput } from '../../shared/signed-input';
 import { Stepper } from '../../shared/stepper';
 import { SeriesPicker } from './series-picker';
@@ -62,16 +65,20 @@ const flag = () => new FormControl(false, { nonNullable: true });
 const DIST_STEP = 25;
 const WIND_STEP = 1;
 const ZEROING_SHOTS = 3;
+const CAMERA_HINT = 'cameraHintShown';
+
+type DraftPhoto = Omit<PhotoRef, 'si'>;
 
 interface RangeDraft {
   sessionId: string;
   value: Record<string, unknown>;
-  photos: string[];
+  /** A plain id in drafts saved before photos could carry marks. */
+  photos: (string | DraftPhoto)[];
 }
 
 @Component({
   selector: 'app-range-session',
-  imports: [ReactiveFormsModule, SeriesPicker, SignedInput, Stepper],
+  imports: [PhotoMeasure, ReactiveFormsModule, SeriesPicker, SignedInput, Stepper],
   templateUrl: './range-session.html',
   styleUrl: './range-session.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -113,7 +120,9 @@ export class RangeSession implements OnInit {
 
   protected readonly pickerOpen = signal(false);
   protected readonly confirmingFinish = signal(false);
-  protected readonly photos = signal<string[]>([]);
+  protected readonly photos = signal<DraftPhoto[]>([]);
+  protected readonly measuring = signal<string | null>(null);
+  protected readonly cameraHint = signal(false);
   protected readonly photoBusy = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly online = signal(navigator.onLine);
@@ -173,6 +182,16 @@ export class RangeSession implements OnInit {
   protected readonly absolute = Math.abs;
 
   private readonly draftSeries = computed((): Series => this.toSeries(this.value()));
+
+  private readonly draftIndex = computed(() => this.session().series.length);
+
+  protected readonly measureContext = computed(() =>
+    measureContext(this.store.diary(), this.rifle(), this.session(), {
+      si: this.draftIndex(),
+      number: this.seriesNumber(),
+      draft: this.draftSeries(),
+    }),
+  );
 
   protected readonly clicksText = computed(() => {
     const elev = parseNum(this.value().elev);
@@ -313,10 +332,11 @@ export class RangeSession implements OnInit {
         if (corr) this.windCorrLeft = corr < 0;
       });
 
+    this.cameraHint.set(!(await this.settings.readSetting<boolean>(CAMERA_HINT)));
     const draft = await this.settings.readSetting<RangeDraft>('rangeDraft');
     if (draft?.sessionId === this.session().id) {
       this.form.patchValue(draft.value);
-      this.photos.set(draft.photos);
+      this.photos.set(draft.photos.map((p) => (typeof p === 'string' ? { id: p } : p)));
       if (!this.picks.controls.scopeId.value) {
         this.picks.controls.scopeId.setValue(this.defaultsFor(this.session()).scopeId);
       }
@@ -429,15 +449,49 @@ export class RangeSession implements OnInit {
     if (!file) return;
     this.photoBusy.set(true);
     this.error.set(null);
+    this.cameraHint.set(false);
+    void this.settings.writeSetting(CAMERA_HINT, true);
     try {
       const id = await this.store.addPhoto(await shrinkPhoto(file));
-      this.photos.update((list) => [...list, id]);
+      this.photos.update((list) => [...list, { id }]);
       await this.storeDraft();
+      this.measuring.set(id);
     } catch {
       this.error.set('Не удалось сохранить фото.');
     } finally {
       this.photoBusy.set(false);
     }
+  }
+
+  protected async applyMeasure(id: string, result: MeasureApplied): Promise<void> {
+    const { group, offUp, offRight, cold, coldUp, coldRight } = this.form.controls;
+    const draft = this.draftIndex();
+    const current = result.results.find((r) => r.si === draft);
+    if (result.sheet) {
+      // A sheet reaches series already saved, so it joins the record straight away.
+      const saved = result.results.filter((r) => r.si !== draft);
+      await this.store.save(
+        'session',
+        withMeasurement(this.session(), { id, marks: result.marks }, saved),
+      );
+      this.photos.update((list) => list.filter((photo) => photo.id !== id));
+    } else {
+      this.photos.update((list) =>
+        list.map((photo) => (photo.id === id ? { ...photo, marks: result.marks } : photo)),
+      );
+    }
+    if (current?.group != null) group.setValue(numText(current.group));
+    if (current?.offset) {
+      offUp.setValue(numText(current.offset.offUp));
+      offRight.setValue(numText(current.offset.offRight));
+    }
+    if (result.cold && this.isFirst()) {
+      cold.setValue(true);
+      coldUp.setValue(numText(result.cold.offUp));
+      coldRight.setValue(numText(result.cold.offRight));
+    }
+    this.measuring.set(null);
+    await this.storeDraft();
   }
 
   protected submit(): Promise<void> {
@@ -484,7 +538,7 @@ export class RangeSession implements OnInit {
       await this.store.save('session', {
         ...session,
         series: [...session.series, series],
-        photos: [...(session.photos ?? []), ...this.photos().map((id) => ({ id, si }))],
+        photos: [...(session.photos ?? []), ...this.photos().map((photo) => ({ ...photo, si }))],
         ...(si === 0 && v.cold
           ? {
               coldShot: compact({
@@ -509,7 +563,7 @@ export class RangeSession implements OnInit {
   protected async finish(): Promise<void> {
     const { open: _open, zeroing: _zeroing, ...session } = this.session();
     await this.settings.writeSetting('rangeDraft', null);
-    for (const id of this.photos()) await this.store.removePhoto(id);
+    for (const { id } of this.photos()) await this.store.removePhoto(id);
     if (session.series.length) await this.store.save('session', session);
     else await this.store.remove('session', session.id);
   }

@@ -1,0 +1,125 @@
+:host {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #0a0c0a;
+}
+
+.photo {
+  display: block;
+  width: 100%;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+line,
+circle,
+path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+text {
+  fill: #2f7a45;
+  font-family: var(--f-num);
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.scale {
+  stroke: #6cc185;
+  stroke-width: 3;
+}
+
+.edge {
+  stroke: #6cc185;
+  stroke-width: 2.5;
+}
+
+rect {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.frame {
+  stroke: #f1c40f;
+  stroke-width: 2.5;
+}
+
+text.number {
+  fill: #1d221f;
+  font-weight: 800;
+}
+
+.spread {
+  stroke: #f5f6f2;
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
+.offset {
+  stroke: #e8743b;
+  stroke-width: 1.5;
+}
+
+.found {
+  stroke: #6cc185;
+  stroke-width: 2.5;
+}
+
+.manual {
+  stroke: #5aa0ff;
+  stroke-width: 2.5;
+  stroke-dasharray: 4 3;
+}
+
+.doubt {
+  stroke: #f1c40f;
+  stroke-width: 2.5;
+  stroke-dasharray: 2 3;
+}
+
+.cold {
+  stroke: #d58cff;
+  stroke-width: 2.5;
+}
+
+.point {
+  stroke: #6cc185;
+  stroke-width: 3;
+}
+
+.aim {
+  stroke: #f1c40f;
+  stroke-width: 2.5;
+}
+
+.centre {
+  stroke: #e8743b;
+  stroke-width: 3;
+}
+
+.loupe {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 120px;
+  height: 120px;
+  border: 2px solid #f1c40f;
+  border-radius: 50%;
+  background: #0a0c0a;
+  pointer-events: none;
+}
+
+.loupe.right {
+  right: 8px;
+  left: auto;
+}
+
+.hair {
+  stroke: #f1c40f;
+  stroke-width: 1;
+}

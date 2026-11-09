@@ -282,6 +282,12 @@ export class SessionEditPage implements OnInit {
     ];
   }
 
+  /** A sheet is linked to its series target by target, on the marking screen. */
+  protected sheetSeries(photo: PhotoRef): string {
+    const linked = photo.marks?.targets.flatMap((t) => (t.si != null ? [t.si + 1] : [])) ?? [];
+    return linked.length ? `Лист: серии ${linked.join(', ')}` : '';
+  }
+
   protected photoValue(photo: PhotoRef): string {
     return photo.si == null ? '' : String(photo.si);
   }
@@ -291,7 +297,8 @@ export class SessionEditPage implements OnInit {
     this.photos.update((list) =>
       list.map((photo, i) => {
         if (i !== index) return photo;
-        return value === '' ? { id: photo.id } : { id: photo.id, si: Number(value) };
+        const { si: _si, ...unlinked } = photo;
+        return value === '' ? unlinked : { ...unlinked, si: Number(value) };
       }),
     );
   }

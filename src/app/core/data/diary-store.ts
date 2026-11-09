@@ -1,5 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { Diary, Doc } from '../ballistics/model';
+import { Diary, Doc, TargetTemplate } from '../ballistics/model';
+import { BUILTIN_TARGETS } from '../target/measure';
 import { Snapshot } from './db';
 import { DocByKind, DocInput, DiaryRepository, DocKind, RestoreMode } from './repository';
 
@@ -19,6 +20,11 @@ export class DiaryStore {
   readonly rifles = computed(() => [...this.diary().rifles].sort(byCreation));
   readonly ammo = computed(() => [...this.diary().ammo].sort(byCreation));
   readonly scopes = computed(() => [...this.diary().scopes].sort(byCreation));
+  private readonly ownTargets = signal<TargetTemplate[]>([]);
+  readonly targets = computed(() => [
+    ...BUILTIN_TARGETS,
+    ...[...this.ownTargets()].sort(byCreation),
+  ]);
 
   async init(): Promise<void> {
     void this.requestPersistence();
@@ -32,7 +38,12 @@ export class DiaryStore {
   }
 
   async reload(): Promise<void> {
-    this.diary.set(await this.repository.diary());
+    const [diary, targets] = await Promise.all([
+      this.repository.diary(),
+      this.repository.list('target'),
+    ]);
+    this.diary.set(diary);
+    this.ownTargets.set(targets);
   }
 
   async save<K extends DocKind>(kind: K, doc: DocInput<K>): Promise<DocByKind[K]> {
@@ -101,6 +112,11 @@ export class DiaryStore {
 
   addPhoto(blob: Blob): Promise<string> {
     return this.repository.putPhoto(blob);
+  }
+
+  /** A retaken shot keeps the place of the old one. */
+  async replacePhoto(id: string, blob: Blob): Promise<void> {
+    await this.repository.putPhoto(blob, id);
   }
 
   removePhoto(id: string): Promise<void> {

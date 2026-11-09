@@ -1,4 +1,4 @@
-import { Ammo, Doc, Rifle, Scope, Session } from '../ballistics/model';
+import { Ammo, Doc, Rifle, Scope, Session, TargetTemplate } from '../ballistics/model';
 import { Snapshot, StoredPhoto } from './db';
 import { convertLegacyDocs } from './legacy';
 import { migrateToScopes, RifleV2, SessionV2 } from './scope-migration';
@@ -93,24 +93,33 @@ function parseV1(file: Record<string, unknown>): ParsedBackup {
       ...migrateToScopes(legacy.rifles, legacy.sessions),
       ammo: legacy.ammo,
       photos,
+      targets: [],
     },
     warnings: { extraColdSeries: legacy.extraColdSeries, missingPhotos },
   };
 }
 
 interface StoredDoc extends Doc {
-  kind: 'scope' | 'rifle' | 'ammo' | 'session';
+  kind: 'scope' | 'rifle' | 'ammo' | 'session' | 'target';
 }
 
 /** Version 2 kept the scope on the rifle; everything else reads the same as version 3. */
 function parseDocs(file: Record<string, unknown>): ParsedBackup {
-  const snapshot: Snapshot = { scopes: [], rifles: [], ammo: [], sessions: [], photos: [] };
+  const snapshot: Snapshot = {
+    scopes: [],
+    rifles: [],
+    ammo: [],
+    sessions: [],
+    photos: [],
+    targets: [],
+  };
   for (const raw of Object.values(file['docs'] as Record<string, StoredDoc>)) {
     const { kind, ...doc } = raw;
     if (kind === 'scope') snapshot.scopes.push(doc as unknown as Scope);
     if (kind === 'rifle') snapshot.rifles.push(doc as unknown as Rifle);
     if (kind === 'ammo') snapshot.ammo.push(doc as unknown as Ammo);
     if (kind === 'session') snapshot.sessions.push(doc as unknown as Session);
+    if (kind === 'target') snapshot.targets.push(doc as unknown as TargetTemplate);
   }
   if (file['version'] === 2) {
     Object.assign(
@@ -161,6 +170,7 @@ export async function buildBackup(snapshot: Snapshot, exportedAt: string): Promi
   for (const r of snapshot.rifles) docs[r.id] = { ...r, kind: 'rifle' };
   for (const a of snapshot.ammo) docs[a.id] = { ...a, kind: 'ammo' };
   for (const s of snapshot.sessions) docs[s.id] = { ...s, kind: 'session' };
+  for (const t of snapshot.targets) docs[t.id] = { ...t, kind: 'target' };
 
   const parts: string[] = [
     `{"format":"${FORMAT}","version":${CURRENT_VERSION},"exportedAt":${JSON.stringify(exportedAt)},`,
