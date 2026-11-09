@@ -178,16 +178,25 @@ export interface PhotoRef {
   marks?: PhotoMarks;
 }
 
+/** Whether a printed element is darker or lighter than what surrounds it. */
+export type Polarity = 'dark' | 'light';
+
+/** One printed ring, by the edges that can be seen on it. */
+export type TargetRing =
+  | { edge: 'light-disc' | 'dark-disc'; d: number; label?: string }
+  | { edge: 'light-ring'; dIn: number; dOut: number; label?: string };
+
 /** The printed element a target is recognised by, in mm. */
 export type TargetReference =
-  | { kind: 'square'; size: number }
-  | { kind: 'circle'; size: number }
+  | { kind: 'square'; size: number; polarity?: Polarity }
+  | { kind: 'circle'; size: number; polarity?: Polarity }
   | { kind: 'grid'; step: number }
-  | { kind: 'rings'; diameters: number[] };
+  /** `diameters` lists every edge; `rings` says what each edge separates, when that is known. */
+  | { kind: 'rings'; diameters: number[]; rings?: TargetRing[] };
 
 export interface TemplateTarget {
   n: number;
-  /** Centre of the reference, mm from the top left corner of the sheet. */
+  /** Centre of the reference, mm; only the distances between targets are relied on. */
   x: number;
   y: number;
   reference: TargetReference;
@@ -197,10 +206,13 @@ export interface TemplateTarget {
 
 export interface TargetTemplate extends Doc {
   name: string;
+  /** Used for perspective only: the drawing can lie anywhere on it, and turned. */
   sheet: SheetSize;
+  /** The drawing, when it is smaller than the sheet it is printed on. */
+  artSize?: SheetSize;
   targets: TemplateTarget[];
-  /** Ships with the app: cannot be edited or deleted. */
-  builtin?: boolean;
+  /** Numbers follow the print rather than the order of the targets on the photo. */
+  numbering?: 'printed';
 }
 
 export interface Session extends Doc {

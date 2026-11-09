@@ -32,6 +32,7 @@ export class Photo {
   constructor() {
     effect((onCleanup) => {
       const id = this.photoId();
+      this.store.photoRevision();
       let objectUrl: string | null = null;
       let cancelled = false;
       void this.store.getPhoto(id).then((blob) => {

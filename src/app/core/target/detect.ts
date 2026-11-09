@@ -3,9 +3,10 @@ import {
   PhotoMarks,
   PhotoScale,
   Point,
-  ScaleSource,
+  Polarity,
   SheetSize,
   TargetReference,
+  TargetRing,
   TargetTemplate,
   TemplateTarget,
 } from '../ballistics/model';
@@ -20,11 +21,13 @@ import {
   solve,
   tiltDegrees,
 } from './homography';
-import { assignToTargets, distance, FoundElement, turnedTargets } from './measure';
+import { assignToTargets, distance, fitLayout, FoundElement } from './measure';
 import {
   assessQuality,
   ElementCheck,
+  isOffScale,
   MEASURE_LIMITS,
+  printScaleOf,
   Quality,
   QualityLimits,
   TEMPLATE_LIMITS,
@@ -32,7 +35,7 @@ import {
 
 type Cv = typeof OpenCv;
 type Mat = OpenCv.Mat;
-type Layout = Pick<TargetTemplate, 'sheet' | 'targets'>;
+type Layout = Pick<TargetTemplate, 'sheet' | 'targets' | 'artSize'>;
 
 export interface DetectImage {
   data: Uint8ClampedArray;
@@ -140,6 +143,12 @@ const MAX_MERGED = 4;
 const ELEMENT_REACH = 18;
 const MIN_ELEMENT_MM = 8;
 const SHEET_INSET = 3;
+/** How far the print can be from the template and still be recognised. */
+const RING_SCALE = { from: 0.85, to: 1.15, step: 0.0025 };
+const RING_ANGLES = 72;
+const RING_MIN_COVER = 0.5;
+/** Each ring must be centred on the common centre to within this, mm. */
+const RING_CENTRE_MM = 1;
 
 const odd = (n: number): number => Math.max(3, Math.round(n) | 1);
 const halfMm = (mm: number): number => Math.round(mm * 2) / 2;
@@ -203,6 +212,16 @@ function components(cv: Cv, bin: Mat, scope: Scope): Components {
 function darkComponents(cv: Cv, gray: Mat, scope: Scope): Components {
   const bin = scope.own(new cv.Mat());
   cv.threshold(gray, bin, darkLevel(gray), 255, cv.THRESH_BINARY_INV);
+  const size = odd(Math.min(gray.cols, gray.rows) * 0.006);
+  const kernel = scope.own(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(size, size)));
+  cv.morphologyEx(bin, bin, cv.MORPH_OPEN, kernel);
+  return components(cv, bin, scope);
+}
+
+/** Large light shapes; a printed field around them has to be told apart by looking at it. */
+function lightComponents(cv: Cv, gray: Mat, scope: Scope): Components {
+  const bin = scope.own(new cv.Mat());
+  cv.threshold(gray, bin, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
   const size = odd(Math.min(gray.cols, gray.rows) * 0.006);
   const kernel = scope.own(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(size, size)));
   cv.morphologyEx(bin, bin, cv.MORPH_OPEN, kernel);
@@ -320,9 +339,16 @@ interface Plane extends FoundPlane {
   turns: number[];
   /** Printed elements already located on the photo; a plane from them needs no second look. */
   aim?: Point | null;
+  /** The homography already allows for a print that is not at 100 %. */
+  printScale?: number;
 }
 
-function sheetPlane(corners: readonly Point[], sheet: SheetSize, turnable: boolean): Plane | null {
+function sheetPlane(
+  corners: readonly Point[],
+  sheet: SheetSize,
+  turnable: boolean,
+  anyTurn = false,
+): Plane | null {
   const [tl, tr, br, bl] = corners;
   const across = (distance(tl, tr) + distance(bl, br)) / 2;
   const down = (distance(tl, bl) + distance(tr, br)) / 2;
@@ -338,7 +364,9 @@ function sheetPlane(corners: readonly Point[], sheet: SheetSize, turnable: boole
     scale: { source: 'sheet', p1: tl, p2: tr, mm: w, sheet: { w, h } },
     homography: [...matrix],
     sheet: { w, h },
-    turns: turnable ? (swapped ? [1, 3] : [0, 2]) : [0],
+    turns: !turnable
+      ? [0]
+      : [...(swapped ? [1, 3] : [0, 2]), ...(anyTurn ? (swapped ? [0, 2] : [1, 3]) : [])],
   };
 }
 
@@ -591,7 +619,8 @@ function circleCentres(
     Math.round(maxR),
   );
   const data = circles.data32F as Float32Array;
-  return Array.from({ length: circles.rows }, (_, i) => ({ x: data[i * 3], y: data[i * 3 + 1] }));
+  // One row with a column per circle, unlike the lines of HoughLines.
+  return Array.from({ length: circles.cols }, (_, i) => ({ x: data[i * 3], y: data[i * 3 + 1] }));
 }
 
 function ringsPlane(
@@ -683,7 +712,9 @@ function findPlane(cv: Cv, gray: Mat, request: MeasureRequest, scope: Scope): Pl
   const { template, holeMm } = request;
   if (template) {
     const corners = findSheetCorners(cv, gray, scope);
-    const onSheet = corners && sheetPlane(corners, template.sheet, true);
+    // A drawing smaller than the sheet, or a ring target, can be printed turned on the sheet.
+    const anyTurn = !!template.artSize || template.targets[0]?.reference.kind === 'rings';
+    const onSheet = corners && sheetPlane(corners, template.sheet, true, anyTurn);
     if (onSheet) return onSheet;
     const element = elementPlane(cv, gray, template, scope);
     if (element && plausible(element.scale, holeMm)) return element;
@@ -781,135 +812,367 @@ function toGray(cv: Cv, rgba: Mat, scope: Scope): Mat {
 
 interface PlaneElement extends FoundElement {
   angleError?: number;
+  /** Rings only: the printed size against the template. */
+  ringScale?: number;
 }
 
-/** Solid black squares and circles on the rectified plane, in mm. */
-function planeElements(cv: Cv, gray: Mat, view: PlaneView, scope: Scope): PlaneElement[] {
-  const { contours, outer } = darkComponents(cv, gray, scope);
+/** The typical brightness on a circle around a point. */
+function levelAround(gray: Mat, { x, y }: Point, radius: number): number {
+  const pixels = gray.data as Uint8Array;
+  const levels: number[] = [];
+  for (let i = 0; i < 48; i++) {
+    const a = (i / 48) * 2 * Math.PI;
+    const px = Math.round(x + Math.cos(a) * radius);
+    const py = Math.round(y + Math.sin(a) * radius);
+    if (px >= 0 && py >= 0 && px < gray.cols && py < gray.rows)
+      levels.push(pixels[py * gray.cols + px]);
+  }
+  return levels.length ? median(levels) : 0;
+}
+
+/** Solid squares and circles of one polarity on the rectified plane, in mm. */
+function solidElements(
+  cv: Cv,
+  gray: Mat,
+  { contours, outer }: Components,
+  polarity: Polarity,
+  view: PlaneView,
+  scope: Scope,
+): PlaneElement[] {
   const elements: PlaneElement[] = [];
   const toMm = ({ x, y }: Point): Point => ({ x: x / view.k + view.x0, y: y / view.k + view.y0 });
+  // The paper itself is the largest light shape there is.
+  const largest = (Math.min(gray.cols, gray.rows) / view.k) * 0.6;
   for (const i of outer) {
     const contour = scope.own(contours.get(i));
     const area = cv.contourArea(contour);
     if (touchesBorder(cv, contour, gray)) continue;
     const size = Math.sqrt(area) / view.k;
-    if (size < MIN_ELEMENT_MM * 0.8) continue;
+    if (size < MIN_ELEMENT_MM * 0.8 || (polarity === 'light' && size > largest)) continue;
     const quad = quadOf(cv, contour, 0.04, scope);
+    let found: PlaneElement | null = null;
+    let reach = 0;
     if (quad && area / quad.hullArea > 0.85) {
       const sides = sidesOf(quad.points);
       if (Math.max(...sides) / Math.min(...sides) < 1.25) {
-        elements.push({
+        const side = sides.reduce((sum, s) => sum + s, 0) / 4;
+        reach = side;
+        found = {
           ...toMm(centreOf(quad.points)),
           kind: 'square',
           // A contour runs through pixel centres, one pixel inside the true outline.
-          size: (sides.reduce((sum, s) => sum + s, 0) / 4 + 1) / view.k,
+          size: (side + 1) / view.k,
           angleError: cornerError(quad.points),
-        });
+          polarity,
+        };
+      }
+    }
+    if (!found) {
+      const circle = cv.minEnclosingCircle(contour);
+      if (area / (Math.PI * circle.radius * circle.radius) <= 0.8) continue;
+      reach = circle.radius * 2;
+      found = { ...toMm(circle.center), kind: 'circle', size: reach / view.k, polarity };
+    }
+    if (polarity === 'light') {
+      // A cell of a thin grid is light too, but beyond its lines there is only more paper.
+      const centre = { x: (found.x - view.x0) * view.k, y: (found.y - view.y0) * view.k };
+      // Past the edge of the sheet is the dark surround of the picture, not a printed field.
+      const margin = reach * 0.75 + FLAT_MARGIN * view.k;
+      const inFrame =
+        centre.x > margin &&
+        centre.y > margin &&
+        centre.x < gray.cols - margin &&
+        centre.y < gray.rows - margin;
+      if (
+        !inFrame ||
+        levelAround(gray, centre, reach * 0.75) > levelAround(gray, centre, reach * 0.25) * 0.75
+      ) {
         continue;
       }
     }
-    const circle = cv.minEnclosingCircle(contour);
-    if (area / (Math.PI * circle.radius * circle.radius) > 0.8) {
-      elements.push({
-        ...toMm(circle.center),
-        kind: 'circle',
-        size: (circle.radius * 2) / view.k,
-      });
-    }
+    elements.push(found);
   }
   return elements;
 }
 
-const elementSize = (reference: TargetReference): number | null =>
-  reference.kind === 'square' || reference.kind === 'circle' ? reference.size : null;
+/** Solid elements of both polarities, dark ones first. */
+function planeElements(cv: Cv, gray: Mat, view: PlaneView, scope: Scope): PlaneElement[] {
+  return [
+    ...solidElements(cv, gray, darkComponents(cv, gray, scope), 'dark', view, scope),
+    ...solidElements(cv, gray, lightComponents(cv, gray, scope), 'light', view, scope),
+  ];
+}
+
+function edgePoints(edges: Mat): Point[] {
+  const pixels = edges.data as Uint8Array;
+  const points: Point[] = [];
+  for (let y = 0; y < edges.rows; y++) {
+    for (let x = 0; x < edges.cols; x++) if (pixels[y * edges.cols + x]) points.push({ x, y });
+  }
+  return points;
+}
+
+/** For each radius, the share of directions in which an edge lies at that radius. */
+function ringCover(
+  points: readonly Point[],
+  centre: Point,
+  maxRadius: number,
+  tolerance: number,
+): Float64Array {
+  const marks = new Uint8Array((maxRadius + 1) * RING_ANGLES);
+  for (const p of points) {
+    const [dx, dy] = [p.x - centre.x, p.y - centre.y];
+    const gap = Math.hypot(dx, dy);
+    if (gap > maxRadius + tolerance) continue;
+    const angle = Math.floor(((Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI)) * RING_ANGLES);
+    const from = Math.max(0, Math.ceil(gap - tolerance));
+    const to = Math.min(maxRadius, Math.floor(gap + tolerance));
+    for (let r = from; r <= to; r++) marks[r * RING_ANGLES + (angle % RING_ANGLES)] = 1;
+  }
+  const cover = new Float64Array(maxRadius + 1);
+  for (let r = 0; r <= maxRadius; r++) {
+    let on = 0;
+    for (let a = 0; a < RING_ANGLES; a++) on += marks[r * RING_ANGLES + a];
+    cover[r] = on / RING_ANGLES;
+  }
+  return cover;
+}
+
+/** The print scale at which every ring has edges under it, or null if there is none. */
+function bestRingScale(cover: Float64Array, radii: readonly number[]) {
+  let best: { scale: number; score: number } | null = null;
+  for (let scale = RING_SCALE.from; scale <= RING_SCALE.to; scale += RING_SCALE.step) {
+    const covers = radii.map((r) => cover[Math.round(r * scale)] ?? 0);
+    if (Math.min(...covers) < RING_MIN_COVER) continue;
+    const score = covers.reduce((sum, c) => sum + c, 0) / covers.length;
+    if (!best || score > best.score) best = { scale, score };
+  }
+  return best;
+}
+
+/** Least-squares circle through the edge points near an expected ring. */
+function fitRing(points: readonly Point[], centre: Point, radius: number, tolerance: number) {
+  const near = points.filter(
+    (p) => Math.abs(Math.hypot(p.x - centre.x, p.y - centre.y) - radius) <= tolerance,
+  );
+  if (near.length < 12) return null;
+  const rows = near.map((p) => [p.x, p.y, 1]);
+  const values = near.map((p) => p.x * p.x + p.y * p.y);
+  const normal = [0, 1, 2].map((i) =>
+    [0, 1, 2].map((j) => rows.reduce((sum, row) => sum + row[i] * row[j], 0)),
+  );
+  const right = [0, 1, 2].map((i) => rows.reduce((sum, row, n) => sum + row[i] * values[n], 0));
+  const fitted = solve(normal, right);
+  if (!fitted) return null;
+  const [cx, cy] = [fitted[0] / 2, fitted[1] / 2];
+  return { x: cx, y: cy, radius: Math.sqrt(fitted[2] + cx * cx + cy * cy), weight: near.length };
+}
+
+interface RingEdge {
+  /** Half of a diameter from the template, mm. */
+  radius: number;
+  lighterInside: boolean;
+}
+
+function ringEdges(rings: readonly TargetRing[]): RingEdge[] {
+  return rings.flatMap((ring): RingEdge[] =>
+    ring.edge === 'light-ring'
+      ? [
+          { radius: ring.dIn / 2, lighterInside: false },
+          { radius: ring.dOut / 2, lighterInside: true },
+        ]
+      : [{ radius: ring.d / 2, lighterInside: ring.edge === 'light-disc' }],
+  );
+}
+
+/** Whether the brightness steps the right way across a ring, in most directions. */
+function edgeSteps(
+  gray: Mat,
+  centre: Point,
+  radius: number,
+  lighterInside: boolean,
+  reach: number,
+) {
+  const pixels = gray.data as Uint8Array;
+  const at = (a: number, r: number) => {
+    const x = Math.round(centre.x + Math.cos(a) * r);
+    const y = Math.round(centre.y + Math.sin(a) * r);
+    return x >= 0 && y >= 0 && x < gray.cols && y < gray.rows ? pixels[y * gray.cols + x] : null;
+  };
+  let right = 0;
+  for (let i = 0; i < RING_ANGLES; i++) {
+    const a = (i / RING_ANGLES) * 2 * Math.PI;
+    const inside = at(a, radius - reach);
+    const outside = at(a, radius + reach);
+    if (inside == null || outside == null) continue;
+    if (lighterInside ? inside - outside > 12 : outside - inside > 12) right++;
+  }
+  return right / RING_ANGLES >= RING_MIN_COVER;
+}
+
+/**
+ * Concentric sets of rings on the rectified plane. A candidate counts only if every ring of the
+ * template is there, around one centre, with the brightness stepping the right way.
+ */
+function findRingSets(
+  cv: Cv,
+  gray: Mat,
+  reference: Extract<TargetReference, { kind: 'rings' }>,
+  view: PlaneView,
+  scope: Scope,
+): PlaneElement[] {
+  const { k, x0, y0 } = view;
+  const radii = reference.diameters.map((d) => (d / 2) * k);
+  const outer = Math.max(...radii);
+  const inner = Math.min(...radii);
+  const edges = scope.own(new cv.Mat());
+  cv.Canny(gray, edges, 30, 90);
+  const points = edgePoints(edges);
+  const tolerance = Math.max(3, 0.8 * k);
+  const maxRadius = Math.ceil(outer * RING_SCALE.to + tolerance + 2);
+  // One wide search: a range around each ring on its own finds only the strongest circle.
+  const candidates = circleCentres(
+    cv,
+    gray,
+    inner,
+    inner * RING_SCALE.from,
+    outer * RING_SCALE.to,
+    scope,
+  );
+  const sets: (PlaneElement & { score: number })[] = [];
+  for (const start of candidates) {
+    let centre: Point = start;
+    let scale = 1;
+    let score = 0;
+    let settled = true;
+    let fits: NonNullable<ReturnType<typeof fitRing>>[] = [];
+    for (let pass = 0; pass < 3 && settled; pass++) {
+      const best = bestRingScale(ringCover(points, centre, maxRadius, tolerance), radii);
+      if (!best) {
+        settled = false;
+        break;
+      }
+      ({ scale, score } = best);
+      fits = radii.flatMap((r) => fitRing(points, centre, r * scale, tolerance) ?? []);
+      if (fits.length < radii.length) {
+        settled = false;
+        break;
+      }
+      const weight = fits.reduce((sum, f) => sum + f.weight, 0);
+      centre = {
+        x: fits.reduce((sum, f) => sum + f.x * f.weight, 0) / weight,
+        y: fits.reduce((sum, f) => sum + f.y * f.weight, 0) / weight,
+      };
+    }
+    if (!settled || fits.some((f) => distance(f, centre) > RING_CENTRE_MM * k)) continue;
+    scale = fits.reduce((sum, f, i) => sum + f.radius / radii[i], 0) / fits.length;
+    if (reference.rings) {
+      const reach = Math.max(3, 0.6 * k);
+      const steps = ringEdges(reference.rings).every((edge) =>
+        edgeSteps(gray, centre, edge.radius * k * scale, edge.lighterInside, reach),
+      );
+      if (!steps) continue;
+    }
+    if (
+      sets.some((set) => distance({ x: (set.x - x0) * k, y: (set.y - y0) * k }, centre) < inner)
+    ) {
+      continue;
+    }
+    sets.push({
+      x: centre.x / k + x0,
+      y: centre.y / k + y0,
+      kind: 'rings',
+      size: (outer * 2 * scale) / k,
+      ringScale: scale,
+      score,
+    });
+  }
+  return sets.map(({ score: _score, ...set }) => set);
+}
+
+const elementSize = (reference: TargetReference): number | null => {
+  if (reference.kind === 'rings') return Math.max(...reference.diameters);
+  return reference.kind === 'grid' ? null : reference.size;
+};
 
 function matchesReference(element: PlaneElement, target: TemplateTarget): boolean {
-  const size = elementSize(target.reference);
-  return (
-    size != null &&
-    element.kind === target.reference.kind &&
-    Math.abs(element.size - size) / size < 0.25 &&
-    distance(element, target) < ELEMENT_REACH
-  );
+  const { reference } = target;
+  const size = elementSize(reference);
+  if (size == null || element.kind !== reference.kind) return false;
+  if (reference.kind !== 'rings' && reference.polarity && element.polarity !== reference.polarity) {
+    return false;
+  }
+  return Math.abs(element.size - size) / size < 0.25;
 }
 
 interface Located {
   n: number;
   aim: Point | null;
   element: PlaneElement | null;
+  target: TemplateTarget;
 }
 
 /** Finds each target of the template on the plane, trying the turns the sheet can have. */
-function locate(elements: readonly PlaneElement[], layout: Layout, turns: readonly number[]) {
-  const options = turns.map((turn) => {
-    const { targets } = turnedTargets(layout, turn);
-    const placed = targets.map((target) => ({
-      target,
-      element: elements.find((e) => matchesReference(e, target)) ?? null,
-    }));
-    return { placed, found: placed.filter((p) => p.element).length };
-  });
-  const best = options.reduce((a, b) => (b.found > a.found ? b : a));
-  return best.placed.map(({ target, element }): Located => {
-    const centre: Point = element ?? target;
+function locate(
+  elements: readonly PlaneElement[],
+  layout: Layout,
+  plane: Pick<Plane, 'turns' | 'sheet'>,
+): Located[] {
+  const fits = fitLayout(elements, layout, plane.turns, matchesReference, ELEMENT_REACH);
+  const most = Math.max(...fits.map((fit) => fit.found));
+  const [best] = fits.filter((fit) => fit.found === most);
+  let { shift } = best;
+  if (!most && layout.artSize && plane.sheet) {
+    // Nothing to go by: most drawings are printed in the middle of the sheet.
+    const size = (values: number[]) => (Math.min(...values) + Math.max(...values)) / 2;
+    shift = {
+      x: plane.sheet.w / 2 - size(best.targets.map((t) => t.x)),
+      y: plane.sheet.h / 2 - size(best.targets.map((t) => t.y)),
+    };
+  }
+  return best.targets.map((target, i): Located => {
+    const element = best.matched[i];
+    const centre: Point = element ?? { x: target.x + shift.x, y: target.y + shift.y };
     return {
       n: target.n,
       element,
+      target,
       aim: target.aim ? { x: centre.x + target.aim.right, y: centre.y - target.aim.up } : null,
     };
   });
 }
 
-/** Least-squares circle through both edges of a printed ring, so that neither side is favoured. */
-function fitCentre(edges: Mat, centre: Point, radius: number): Point {
-  const pixels = edges.data as Uint8Array;
-  const rows: number[][] = [];
-  const values: number[] = [];
-  for (let degree = 0; degree < 360; degree++) {
-    const a = (degree * Math.PI) / 180;
-    for (const r of Array.from({ length: 25 }, (_, i) => radius + (i % 2 ? (i + 1) / 2 : -i / 2))) {
-      const x = Math.round(centre.x + Math.cos(a) * r);
-      const y = Math.round(centre.y + Math.sin(a) * r);
-      if (x < 0 || y < 0 || x >= edges.cols || y >= edges.rows) continue;
-      if (!pixels[y * edges.cols + x]) continue;
-      rows.push([x, y, 1]);
-      values.push(x * x + y * y);
+/** Where a hole shows light, because the print there is dark, by the rings of each target. */
+function ringFields(cv: Cv, gray: Mat, located: readonly Located[], view: PlaneView, scope: Scope) {
+  let mask: Mat | null = null;
+  for (const { element, target } of located) {
+    const { reference } = target;
+    if (element?.kind !== 'rings' || reference.kind !== 'rings' || !reference.rings) continue;
+    mask ??= scope.own(cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1));
+    const centre = new cv.Point(
+      Math.round((element.x - view.x0) * view.k),
+      Math.round((element.y - view.y0) * view.k),
+    );
+    const k = view.k * (element.ringScale ?? 1);
+    const fill = (diameter: number, value: number) =>
+      cv.circle(
+        mask as Mat,
+        centre,
+        Math.round((diameter / 2) * k),
+        new cv.Scalar(value),
+        cv.FILLED,
+      );
+    const outerFirst = [...reference.rings].sort(
+      (a, b) => (b.edge === 'light-ring' ? b.dOut : b.d) - (a.edge === 'light-ring' ? a.dOut : a.d),
+    );
+    for (const ring of outerFirst) {
+      if (ring.edge === 'light-ring') {
+        fill(ring.dOut, 0);
+        fill(ring.dIn, 255);
+      } else fill(ring.d, ring.edge === 'dark-disc' ? 255 : 0);
     }
   }
-  const normal = [0, 1, 2].map((i) =>
-    [0, 1, 2].map((j) => rows.reduce((sum, row) => sum + row[i] * row[j], 0)),
-  );
-  const right = [0, 1, 2].map((i) => rows.reduce((sum, row, n) => sum + row[i] * values[n], 0));
-  const fitted = rows.length > 8 ? solve(normal, right) : null;
-  return fitted ? { x: fitted[0] / 2, y: fitted[1] / 2 } : centre;
-}
-
-/** Rings have no solid outline to measure, only a centre to refine. */
-function refineRings(
-  cv: Cv,
-  gray: Mat,
-  located: Located[],
-  layout: Layout,
-  view: PlaneView,
-  scope: Scope,
-): void {
-  const rings = layout.targets[0]?.reference;
-  if (rings?.kind !== 'rings') return;
-  const max = Math.max(...rings.diameters) * view.k;
-  const edges = scope.own(new cv.Mat());
-  cv.Canny(gray, edges, 50, 150);
-  const centres = circleCentres(cv, gray, max / 2, max * 0.1, max * 0.6, scope);
-  for (const target of located) {
-    if (!target.aim) continue;
-    const near = centres.find(
-      (c) =>
-        distance({ x: c.x / view.k + view.x0, y: c.y / view.k + view.y0 }, target.aim as Point) <
-        ELEMENT_REACH,
-    );
-    if (!near) continue;
-    const { x, y } = fitCentre(edges, near, max / 2);
-    target.aim = { x: x / view.k + view.x0, y: y / view.k + view.y0 };
-  }
+  return mask;
 }
 
 interface Candidate extends Point {
@@ -987,12 +1250,16 @@ interface Printed extends Point {
   half: number;
 }
 
-/** Candidates in pixels of `gray`, best first; `printed` zones cannot hold dark holes. */
+/**
+ * Candidates in pixels of `gray`, best first; `printed` zones cannot hold dark holes. With
+ * `fields` known exactly, a hole is dark outside them and light inside, and nothing else counts.
+ */
 function findHoles(
   cv: Cv,
   gray: Mat,
   radius: number,
   printed: readonly Printed[],
+  fields: Mat | null,
   scope: Scope,
 ): Candidate[] {
   const light = scope.own(new cv.Mat());
@@ -1019,7 +1286,12 @@ function findHoles(
 
   const bright = scope.own(new cv.Mat());
   cv.adaptiveThreshold(even, bright, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, block, -18);
-  cv.bitwise_and(bright, blackFields(cv, gray, radius, scope), bright);
+  cv.bitwise_and(bright, fields ?? blackFields(cv, gray, radius, scope), bright);
+  if (fields) {
+    const outside = scope.own(new cv.Mat());
+    cv.bitwise_not(fields, outside);
+    cv.bitwise_and(dark, outside, dark);
+  }
 
   // One mask for both: a hole on the edge of a black field is half dark and half light.
   const holes = scope.own(new cv.Mat());
@@ -1046,11 +1318,10 @@ function rankHoles(holes: readonly Point[], shots: number | null): DetectedHole[
   }));
 }
 
-function checksOf(located: readonly Located[], layout: Layout | null): ElementCheck[] {
-  return located.flatMap(({ element, n }) => {
+function checksOf(located: readonly Located[]): ElementCheck[] {
+  return located.flatMap(({ element, target }) => {
     if (!element) return [];
-    const target = layout?.targets.find((t) => t.n === n);
-    const expected = target ? elementSize(target.reference) : null;
+    const expected = elementSize(target.reference);
     return [
       {
         size: element.size,
@@ -1066,6 +1337,7 @@ function qualityOf(
   image: DetectImage,
   checks: readonly ElementCheck[],
   limits: QualityLimits,
+  found?: { missing?: boolean; printScale?: number },
 ): Quality | null {
   if (!plane.homography) return null;
   const middle = applyHomography(plane.homography, { x: image.width / 2, y: image.height / 2 });
@@ -1074,6 +1346,7 @@ function qualityOf(
     pxPerMmAt(plane.homography, middle),
     checks,
     limits,
+    found,
   );
 }
 
@@ -1086,7 +1359,7 @@ function measureOnImage(
 ): MeasureResult {
   const { scale } = plane;
   const radius = ((request.holeMm / 2) * distance(scale.p1, scale.p2)) / scale.mm;
-  const holes = rankHoles(findHoles(cv, gray, radius, [], scope), request.shots);
+  const holes = rankHoles(findHoles(cv, gray, radius, [], null, scope), request.shots);
   const n = request.template?.targets[0]?.n ?? 1;
   return {
     plane: { scale },
@@ -1094,6 +1367,24 @@ function measureOnImage(
     targets: [{ n, aim: plane.aim ?? null, holes }],
     quality: null,
     elements: [],
+  };
+}
+
+/** The sheet is good for perspective only: the size comes from what is printed on it. */
+function rescaled(plane: Plane, printScale: number): Plane {
+  const matrix = plane.homography as number[];
+  const sheet = plane.sheet && { w: plane.sheet.w / printScale, h: plane.sheet.h / printScale };
+  return {
+    ...plane,
+    homography: matrix.map((value, i) => (i < 6 ? value / printScale : value)),
+    sheet,
+    printScale,
+    scale: {
+      ...plane.scale,
+      source: 'element',
+      mm: plane.scale.mm / printScale,
+      ...(sheet ? { sheet } : {}),
+    },
   };
 }
 
@@ -1108,19 +1399,29 @@ function measureOnPlane(
   const view = planeView(matrix, request.image, plane.sheet);
   const flat = warp(cv, rgba, matrix, view, scope);
   const gray = toGray(cv, flat, scope);
-  const elements = planeElements(cv, gray, view, scope);
   const usable = plane.scale.source !== 'card' ? request.template : null;
-  const located: Located[] = usable
-    ? locate(elements, usable, plane.turns)
-    : [{ n: 1, aim: null, element: null }];
-  if (usable) refineRings(cv, gray, located, usable, view, scope);
+  const reference = usable?.targets[0]?.reference;
+  const elements = [
+    ...planeElements(cv, gray, view, scope),
+    ...(reference?.kind === 'rings' ? findRingSets(cv, gray, reference, view, scope) : []),
+  ];
+  const located: Located[] = usable ? locate(elements, usable, plane) : [];
+  const checks = checksOf(located);
+
+  const printScale = printScaleOf(checks);
+  if (plane.scale.source === 'sheet' && plane.printScale == null && isOffScale(printScale)) {
+    return measureOnPlane(cv, rgba, rescaled(plane, printScale), request, scope);
+  }
 
   const toFlat = ({ x, y }: Point): Point => ({
     x: (x - view.x0) * view.k,
     y: (y - view.y0) * view.k,
   });
+  // Rings are not solid: shots land inside them.
   const printed = located.flatMap(({ element }) =>
-    element ? [{ ...toFlat(element), half: (element.size / 2) * view.k }] : [],
+    element && element.kind !== 'rings'
+      ? [{ ...toFlat(element), half: (element.size / 2) * view.k }]
+      : [],
   );
   const radius = (request.holeMm / 2) * view.k;
   // The edge of the sheet against a light table can pass for a row of holes.
@@ -1131,10 +1432,12 @@ function measureOnPlane(
       y > SHEET_INSET &&
       x < bounds.w - SHEET_INSET &&
       y < bounds.h - SHEET_INSET);
-  const holesMm = findHoles(cv, gray, radius, printed, scope)
+  const fields = ringFields(cv, gray, located, view, scope);
+  const holesMm = findHoles(cv, gray, radius, printed, fields, scope)
     .map((hole) => ({ x: hole.x / view.k + view.x0, y: hole.y / view.k + view.y0 }))
     .filter(onSheet);
-  const aims = located.map((target) => target.aim);
+  const places: { n: number; aim: Point | null }[] = usable ? located : [{ n: 1, aim: null }];
+  const aims = places.map((target) => target.aim);
   const owners = aims.every(Boolean)
     ? assignToTargets(holesMm, aims as Point[])
     : holesMm.map(() => 0);
@@ -1144,7 +1447,7 @@ function measureOnPlane(
   return {
     plane: { scale: plane.scale, homography: matrix },
     flat: flatImage(flat, view),
-    targets: located.map((target, i) => ({
+    targets: places.map((target, i) => ({
       n: target.n,
       aim: image(target.aim),
       holes: rankHoles(
@@ -1152,7 +1455,10 @@ function measureOnPlane(
         request.shots,
       ).map((hole) => ({ ...hole, ...(image(hole) as Point) })),
     })),
-    quality: qualityOf(plane, request.image, checksOf(located, usable), MEASURE_LIMITS),
+    quality: qualityOf(plane, request.image, checks, MEASURE_LIMITS, {
+      missing: located.some((l) => elementSize(l.target.reference) != null) && !checks.length,
+      printScale: plane.printScale,
+    }),
     elements: elements
       .filter((e) => e.size > request.holeMm * 1.4)
       .map(({ x, y, kind, size }) => ({ x, y, kind, size })),
@@ -1176,14 +1482,43 @@ function detectMeasure(cv: Cv, rgba: Mat, request: MeasureRequest, scope: Scope)
     : measureOnImage(cv, gray, plane, request, scope);
 }
 
-function proposeRings(cv: Cv, gray: Mat, view: PlaneView, scope: Scope): TemplateTarget[] | null {
+/** What a measured set of edges is, or null if the rings are drawn as thin lines. */
+function classifyRings(
+  gray: Mat,
+  centre: Point,
+  radii: readonly number[],
+  k: number,
+): TargetRing[] | null {
+  if (radii.some((r, i) => i > 0 && r - radii[i - 1] < 1.5 * k)) return null;
+  const reach = Math.max(3, 0.6 * k);
+  const lighter = radii.map(
+    (r) => levelAround(gray, centre, r - reach) > levelAround(gray, centre, r + reach),
+  );
+  const mm = (r: number) => halfMm((r * 2) / k);
+  const rings: TargetRing[] = [];
+  for (let i = 0; i < radii.length; i++) {
+    if (lighter[i]) rings.push({ edge: 'light-disc', d: mm(radii[i]) });
+    else if (lighter[i + 1]) {
+      rings.push({ edge: 'light-ring', dIn: mm(radii[i]), dOut: mm(radii[i + 1]) });
+      i++;
+    } else rings.push({ edge: 'dark-disc', d: mm(radii[i]) });
+  }
+  return rings;
+}
+
+function proposeRings(cv: Cv, gray: Mat, view: PlaneView, scope: Scope) {
   const minimum = 15 * view.k;
   const side = Math.min(gray.cols, gray.rows);
   const edges = scope.own(new cv.Mat());
-  cv.Canny(gray, edges, 50, 150);
+  cv.Canny(gray, edges, 30, 90);
+  const points = edgePoints(edges);
   const rings = circleCentres(cv, gray, minimum * 2, minimum / 2, side / 2, scope).flatMap((c) => {
-    const radii = ringRadii(edges, c, side / 2);
-    return radii.length >= 2 ? [{ ...c, radii }] : [];
+    const first = ringRadii(edges, c, side / 2);
+    if (first.length < 2) return [];
+    const fit = fitRing(points, c, Math.max(...first), 4);
+    const centre = fit ? { x: fit.x, y: fit.y } : c;
+    const radii = ringRadii(edges, centre, Math.max(...first) + 8);
+    return radii.length >= 2 ? [{ ...centre, radii }] : [];
   });
   if (!rings.length) return null;
   const outer = Math.max(...rings[0].radii);
@@ -1192,14 +1527,22 @@ function proposeRings(cv: Cv, gray: Mat, view: PlaneView, scope: Scope): Templat
     x: r.x / view.k + view.x0,
     y: r.y / view.k + view.y0,
     radii: r.radii,
+    rings: classifyRings(gray, r, r.radii, view.k),
   }));
-  return readingOrder(places, 15).map((place, i) => ({
-    n: i + 1,
-    x: halfMm(place.x),
-    y: halfMm(place.y),
-    reference: { kind: 'rings', diameters: place.radii.map((r) => halfMm((r * 2) / view.k)) },
-    aim: { up: 0, right: 0 },
-  }));
+  return {
+    targets: readingOrder(places, 15).map((place, i): TemplateTarget => ({
+      n: i + 1,
+      x: halfMm(place.x),
+      y: halfMm(place.y),
+      reference: {
+        kind: 'rings',
+        diameters: place.radii.map((r) => halfMm((r * 2) / view.k)),
+        ...(place.rings ? { rings: place.rings } : {}),
+      },
+      aim: { up: 0, right: 0 },
+    })),
+    alike: places.map((p) => ({ size: (Math.max(...p.radii) * 2) / view.k })),
+  };
 }
 
 function proposeGrid(cv: Cv, gray: Mat, view: PlaneView, sheet: SheetSize, scope: Scope) {
@@ -1225,18 +1568,22 @@ function proposeTargets(
   sheet: SheetSize,
   scope: Scope,
 ) {
+  // Rings first: white lines cut a printed disc into pieces that look like elements of their own.
+  const rings = proposeRings(cv, gray, view, scope);
+  if (rings) return rings;
   const large = elements.filter((e) => e.size >= MIN_ELEMENT_MM);
-  if (!large.length)
-    return {
-      targets: proposeRings(cv, gray, view, scope) ?? proposeGrid(cv, gray, view, sheet, scope),
-      alike: [],
-    };
+  if (!large.length) return { targets: proposeGrid(cv, gray, view, sheet, scope), alike: [] };
   const top = large.reduce((a, b) => (b.size > a.size ? b : a));
   const alike = large.filter(
     (e) => e.kind === top.kind && Math.abs(e.size - top.size) / top.size < 0.15,
   );
   const size = halfMm(median(alike.map((e) => e.size)));
-  const reference: TargetReference = { kind: top.kind, size };
+  if (top.kind === 'rings') return { targets: null, alike: [] };
+  const reference: TargetReference = {
+    kind: top.kind,
+    size,
+    ...(top.polarity === 'light' ? { polarity: 'light' as const } : {}),
+  };
   const targets = readingOrder(alike, size).map((e, i) => ({
     n: i + 1,
     x: halfMm(e.x),
@@ -1270,7 +1617,10 @@ function detectSurvey(cv: Cv, rgba: Mat, request: SurveyRequest, scope: Scope): 
   const sheet = plane.sheet ?? request.sheet;
   const elements = planeElements(cv, gray, view, scope);
   const { targets, alike } = proposeTargets(cv, gray, elements, view, sheet, scope);
-  const checks = alike.map((e) => ({ size: e.size, angleError: e.angleError }));
+  const checks = alike.map((e: Pick<PlaneElement, 'size' | 'angleError'>) => ({
+    size: e.size,
+    angleError: e.angleError,
+  }));
   return {
     plane: { scale: plane.scale, homography: matrix },
     flat: flatImage(flat, view),

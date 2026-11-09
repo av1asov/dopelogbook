@@ -91,6 +91,25 @@
       <span class="plain">{{ sheetHint() }}</span>
     </div>
 
+    <div class="field">
+      Рисунок, если меньше листа, мм
+      <span class="pair">
+        <input
+          class="num"
+          inputmode="decimal"
+          aria-label="Ширина рисунка, мм"
+          formControlName="artW"
+        />
+        <input
+          class="num"
+          inputmode="decimal"
+          aria-label="Высота рисунка, мм"
+          formControlName="artH"
+        />
+      </span>
+      <span class="plain">Лист нужен только для перспективы: мишени ищутся по рисунку.</span>
+    </div>
+
     <div class="list">
       <button type="button" class="row" (click)="toggle('count')">
         <span class="muted">Мишеней на листе</span><b>{{ countText() }}</b>
@@ -124,10 +143,82 @@
               </button>
             }
           </span>
-          <label class="field">
-            {{ sizeLabel() }}
-            <input class="num" inputmode="decimal" formControlName="size" />
-          </label>
+          @if (form.controls.kind.value === 'rings') {
+            @for (row of ringRows(); track $index) {
+              <div class="ring">
+                <select
+                  aria-label="Тип кольца"
+                  [value]="row.edge"
+                  (change)="changeRing($index, { edge: $any($event.target).value })"
+                >
+                  @for (item of ringKinds; track item[0]) {
+                    <option [value]="item[0]" [selected]="item[0] === row.edge">
+                      {{ item[1] }}
+                    </option>
+                  }
+                </select>
+                @if (row.edge === 'light-ring') {
+                  <input
+                    class="num"
+                    inputmode="decimal"
+                    aria-label="Внутренний диаметр, мм"
+                    placeholder="внутр."
+                    [value]="row.dIn"
+                    (input)="changeRing($index, { dIn: $any($event.target).value })"
+                  />
+                  <input
+                    class="num"
+                    inputmode="decimal"
+                    aria-label="Внешний диаметр, мм"
+                    placeholder="внешн."
+                    [value]="row.dOut"
+                    (input)="changeRing($index, { dOut: $any($event.target).value })"
+                  />
+                } @else {
+                  <input
+                    class="num"
+                    inputmode="decimal"
+                    aria-label="Диаметр, мм"
+                    placeholder="⌀, мм"
+                    [value]="row.d"
+                    (input)="changeRing($index, { d: $any($event.target).value })"
+                  />
+                }
+                <button
+                  type="button"
+                  class="ring-remove"
+                  aria-label="Убрать кольцо"
+                  (click)="removeRing($index)"
+                >
+                  ×
+                </button>
+              </div>
+            }
+            <button type="button" class="btn" (click)="addRing()">+ кольцо</button>
+          } @else {
+            <label class="field">
+              {{ sizeLabel() }}
+              <input class="num" inputmode="decimal" formControlName="size" />
+            </label>
+            @if (form.controls.kind.value !== 'grid') {
+              <span class="seg">
+                <button
+                  type="button"
+                  [attr.aria-pressed]="form.controls.polarity.value === 'dark'"
+                  (click)="form.controls.polarity.setValue('dark')"
+                >
+                  Тёмный на светлом
+                </button>
+                <button
+                  type="button"
+                  [attr.aria-pressed]="form.controls.polarity.value === 'light'"
+                  (click)="form.controls.polarity.setValue('light')"
+                >
+                  Светлый на тёмном
+                </button>
+              </span>
+            }
+          }
         </div>
       }
 
@@ -167,6 +258,13 @@
             >
               По столбцам
             </button>
+            <button
+              type="button"
+              [attr.aria-pressed]="order() === 'printed'"
+              (click)="order.set('printed')"
+            >
+              Как напечатано
+            </button>
           </span>
         </div>
       }
@@ -178,7 +276,9 @@
     </p>
 
     @if (existing()) {
-      @if (confirmingDelete()) {
+      @if (photoCount(); as count) {
+        <p class="hint">Удалить нельзя: мишень использована в разметке фото ({{ count }}).</p>
+      } @else if (confirmingDelete()) {
         <div class="notice confirm">
           <span>Удалить мишень?</span>
           <div class="btn-row">

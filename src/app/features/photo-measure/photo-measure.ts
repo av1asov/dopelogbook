@@ -27,13 +27,14 @@ import {
   ScopeUnits,
   Series,
   Session,
+  SheetSize,
   shortDate,
   TargetTemplate,
   unitsOf,
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
-import { shrinkPhoto } from '../../core/image';
+import { shrinkPhoto, turnedPhoto } from '../../core/image';
 import { DetectImage, FlatImage, MeasureResult } from '../../core/target/detect';
 import { flatUrl, readPixels, TargetDetector } from '../../core/target/detector';
 import {
@@ -51,14 +52,17 @@ import {
   distance,
   matchesLayout,
   measureTarget,
+  assignToTargets,
   meanPoint,
   Offset,
   offsetShort,
   SeriesOption,
   SeriesResult,
   toMillimetres,
+  turnPlane,
+  turnPoint,
 } from '../../core/target/measure';
-import { ISSUE_TEXT, Quality } from '../../core/target/quality';
+import { issueText, Quality } from '../../core/target/quality';
 import { snapToLine } from '../../core/target/snap';
 import { Marker, Segment, TargetTap, TargetView } from '../../shared/target-view';
 import { TargetEditor } from '../targets/target-editor';
@@ -196,6 +200,12 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   protected readonly straight = signal(true);
 
   private blob: Blob | undefined;
+  /** The shot before turning; every turn starts from it, to re-encode only once. */
+  private source: Blob | undefined;
+  /** The photo in the store. It changes only together with its marks: «Отмена» undoes both. */
+  private stored: Blob | undefined;
+  private turns = 0;
+  private saving = false;
   private generation = 0;
   private pixels: DetectImage | null = null;
 
@@ -473,8 +483,9 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   });
 
   protected readonly issue = computed(() => {
-    const [first] = this.quality()?.issues ?? [];
-    return first ? ISSUE_TEXT[first] : null;
+    const quality = this.quality();
+    const [first] = quality?.issues ?? [];
+    return first ? issueText(first, quality?.printScale) : null;
   });
 
   /** «Лист найден и выпрямлен · наклон 18° · лист ровный ✓» */
@@ -494,7 +505,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   });
 
   async ngOnInit(): Promise<void> {
-    this.blob = await this.store.getPhoto(this.photoId());
+    this.blob = this.source = this.stored = await this.store.getPhoto(this.photoId());
     if (!this.blob) {
       this.notice.set('Фото не найдено');
       return;
@@ -551,16 +562,56 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   private async straighten({ homography: matrix, scale }: PhotoMarks): Promise<void> {
     const generation = ++this.generation;
     try {
-      const image = await readPixels(this.blob as Blob);
-      const { flat } = await this.detector.warp({
-        kind: 'warp',
-        image,
-        homography: matrix as number[],
-        sheet: scale.sheet,
-      });
+      const flat = await this.rectified(this.blob as Blob, matrix as number[], scale.sheet);
       if (generation === this.generation) await this.showFlat(flat);
     } catch {
       this.straight.set(false);
+    }
+  }
+
+  private async rectified(blob: Blob, matrix: number[], sheet?: SheetSize): Promise<FlatImage> {
+    const image = await readPixels(blob);
+    const { flat } = await this.detector.warp({ kind: 'warp', image, homography: matrix, sheet });
+    return flat;
+  }
+
+  /** A quarter turn clockwise, marks included. */
+  protected async turnPhoto(): Promise<void> {
+    if (!this.source || this.busy() || this.saving) return;
+    const generation = ++this.generation;
+    this.busy.set('Поворачиваю снимок…');
+    try {
+      const turns = (this.turns + 1) % 4;
+      const blob = turns ? await turnedPhoto(this.source, turns) : this.source;
+      const photo = { w: this.imageWidth(), h: this.imageHeight() };
+      const marks = this.marks();
+      const plane = marks && turnPlane(marks, photo);
+      const flat = plane?.homography
+        ? await this.rectified(blob, plane.homography, plane.scale.sheet)
+        : null;
+      if (generation !== this.generation) return;
+      this.blob = blob;
+      this.turns = turns;
+      this.pixels = null;
+      await this.loadPhoto();
+      await this.showFlat(flat);
+      const turn = (p: Point): Point => turnPoint(photo, 1, p);
+      if (plane) {
+        this.scale.set(plane.scale);
+        this.matrix.set(plane.homography);
+      }
+      this.picks.update((picks) => picks.map(turn));
+      this.targets.update((targets) =>
+        targets.map((t) => ({
+          ...t,
+          aim: t.aim && turn(t.aim),
+          holes: t.holes.map((hole) => ({ ...hole, ...turn(hole) })),
+        })),
+      );
+    } catch {
+      if (generation === this.generation) this.notice.set('Не удалось повернуть снимок');
+    } finally {
+      if (generation === this.generation) this.busy.set(null);
     }
   }
 
@@ -618,8 +669,8 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
-    this.blob = await shrinkPhoto(file);
-    await this.store.replacePhoto(this.photoId(), this.blob);
+    this.blob = this.source = await shrinkPhoto(file);
+    this.turns = 0;
     this.pixels = null;
     await this.loadPhoto();
     this.targets.set([{ n: 1, aim: null, holes: [] }]);
@@ -675,10 +726,74 @@ export class PhotoMeasure implements OnInit, OnDestroy {
 
   private setAim(at: Point): void {
     const index = this.nearestTarget(at);
-    this.targets.update((targets) => targets.map((t, i) => (i === index ? { ...t, aim: at } : t)));
+    if (this.quality()?.issues.includes('elements')) this.moveLayout(index, at);
+    else {
+      this.targets.update((targets) =>
+        targets.map((t, i) => (i === index ? { ...t, aim: at } : t)),
+      );
+    }
     this.aimLocked.set(true);
     this.aimOrigin.set('вручную');
     this.mode.set('holes');
+  }
+
+  /** With no elements found, one centre set by hand places the whole sheet of targets. */
+  private moveLayout(index: number, at: Point): void {
+    const matrix = this.matrix();
+    const targets = this.targets();
+    const old = targets[index].aim;
+    if (!matrix || !old || targets.some((t) => !t.aim)) {
+      this.targets.set(targets.map((t, i) => (i === index ? { ...t, aim: at } : t)));
+      return;
+    }
+    const inverse = invertHomography(matrix);
+    const [from, to] = [applyHomography(matrix, old), applyHomography(matrix, at)];
+    const [dx, dy] = [to.x - from.x, to.y - from.y];
+    const places = targets.map((t) => {
+      const mm = applyHomography(matrix, t.aim as Point);
+      return { x: mm.x + dx, y: mm.y + dy };
+    });
+    const holes = targets.flatMap((t) => t.holes);
+    const owners = assignToTargets(
+      holes.map((hole) => applyHomography(matrix, hole)),
+      places,
+    );
+    this.targets.set(
+      targets.map((t, i) => ({
+        ...t,
+        aim: applyHomography(inverse, places[i]),
+        holes: holes.filter((_, h) => owners[h] === i || (owners[h] < 0 && i === index)),
+      })),
+    );
+    this.quality.update(
+      (quality) =>
+        quality && { ...quality, issues: quality.issues.filter((q) => q !== 'elements') },
+    );
+  }
+
+  protected readonly canTurnNumbers = computed(
+    () => this.sheetMode() && this.targets().length > 1 && this.targets().every((t) => t.aim),
+  );
+
+  /** The sheet may lie so that nothing on it tells its numbers: a person can see them. */
+  protected turnNumbers(): void {
+    const targets = this.targets();
+    const places = targets.map((t) => t.aim as Point);
+    const centre = meanPoint(places) as Point;
+    const reach = (Math.min(...places.map((p) => distance(p, centre))) || 1) / 2;
+    for (const quarter of [1, 2, 3]) {
+      const moved = places.map((place) => {
+        let [x, y] = [place.x - centre.x, place.y - centre.y];
+        for (let i = 0; i < quarter; i++) [x, y] = [-y, x];
+        return places.findIndex((p) => distance(p, { x: x + centre.x, y: y + centre.y }) < reach);
+      });
+      if (moved.includes(-1) || new Set(moved).size < moved.length) continue;
+      this.targets.set(
+        targets.map((t, i) => ({ ...targets[moved[i]], n: t.n })).sort((a, b) => a.n - b.n),
+      );
+      this.pickedSeries.set({});
+      return;
+    }
   }
 
   /** The target a mark on the photo belongs to: the one with the closest point of aim. */
@@ -777,9 +892,9 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     this.pickedSeries.update((picked) => ({ ...picked, [n]: si }));
   }
 
-  protected submit(): void {
+  protected async submit(): Promise<void> {
     const marks = this.marks();
-    if (!marks || !this.canApply()) return;
+    if (!marks || !this.canApply() || this.saving) return;
     const sheet = this.sheetMode();
     const assigned = this.seriesByTarget();
     const clean = this.targets().map(({ holes, ...target }): PhotoTarget => {
@@ -805,6 +920,19 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     });
     const cold = sheet ? null : measureTarget(marks, clean[0]).cold;
     const templateId = this.targetId();
+    if (this.blob !== this.stored) {
+      this.saving = true;
+      try {
+        await this.store.replacePhoto(this.photoId(), this.blob as Blob);
+        this.stored = this.source = this.blob;
+        this.turns = 0;
+      } catch {
+        this.notice.set('Не удалось сохранить снимок');
+        return;
+      } finally {
+        this.saving = false;
+      }
+    }
     this.applied.emit({
       marks: {
         ...(templateId ? { templateId } : {}),
@@ -831,7 +959,11 @@ export class PhotoMeasure implements OnInit, OnDestroy {
       const result = await this.detector.measure({
         kind: 'measure',
         image,
-        template: template && { sheet: template.sheet, targets: template.targets },
+        template: template && {
+          sheet: template.sheet,
+          targets: template.targets,
+          artSize: template.artSize,
+        },
         manual: marks,
         holeMm,
         shots,
