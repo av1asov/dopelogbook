@@ -249,7 +249,8 @@ export function referenceText(reference: TargetReference): string {
     case 'grid':
       return `сетка ${numText(reference.step)} мм`;
     case 'rings':
-      return `кольца ${reference.diameters.map(numText).join('/')} мм`;
+      // A slash before a digit is no place for a line break by itself: many rings would not fit.
+      return `кольца ${reference.diameters.map(numText).join('/\u200b')} мм`;
   }
 }
 

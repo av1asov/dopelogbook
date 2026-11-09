@@ -21,6 +21,7 @@ import {
   offsetShort,
   photoSeries,
   photosWithTemplate,
+  referenceText,
   spread,
   templateText,
   toMillimetres,
@@ -503,6 +504,9 @@ describe('templates', () => {
 
   it('describes one', () => {
     expect(templateText(four)).toBe('A4 · 4 мишени · квадрат 30 мм');
+    expect(referenceText({ kind: 'rings', diameters: [29, 51.8, 87.4] })).toBe(
+      'кольца 29/\u200b51,8/\u200b87,4 мм',
+    );
   });
 
   it('turns with the sheet', () => {
