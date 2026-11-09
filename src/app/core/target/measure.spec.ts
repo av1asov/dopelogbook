@@ -11,20 +11,24 @@ import {
 } from './homography';
 import {
   assignToTargets,
-  BUILTIN_TARGETS,
   caliberMm,
   defaultSeries,
+  fitLayout,
   matchesLayout,
   measureTarget,
   offsetShort,
+  photosWithTemplate,
   spread,
   templateText,
   toMillimetres,
   turnedTargets,
+  turnPlane,
+  turnPoint,
   withMeasurement,
 } from './measure';
-import { assessQuality, MEASURE_LIMITS, TEMPLATE_LIMITS } from './quality';
+import { assessQuality, issueText, MEASURE_LIMITS, TEMPLATE_LIMITS } from './quality';
 import { snapToLine } from './snap';
+import { TEST_TARGETS } from './testing/templates';
 
 const auto = ([x, y]: number[]) => ({ x, y, auto: true });
 const manualScale = {
@@ -241,9 +245,17 @@ describe('quality checks', () => {
     expect(assessQuality(18, 6, [square(30, 3)], MEASURE_LIMITS).issues).toEqual(['bent']);
   });
 
-  it('compares a single element with the template', () => {
+  it('blames the print, not the sheet, for an element of the wrong size', () => {
     const element = { size: 26.5, expected: 25, angleError: 0 };
-    expect(assessQuality(0, 6, [element], MEASURE_LIMITS).issues).toEqual(['bent']);
+    const quality = assessQuality(0, 6, [element], MEASURE_LIMITS);
+    expect(quality.issues).toEqual(['print-scale']);
+    expect(quality.printScale).toBeCloseTo(1.06, 2);
+    expect(issueText('print-scale', quality.printScale)).toContain('≈ 106 %');
+  });
+
+  it('says the elements were not found instead of calling the sheet bent', () => {
+    const issues = assessQuality(0, 6, [square(30), square(40)], MEASURE_LIMITS, { missing: true });
+    expect(issues.issues).toEqual(['elements']);
   });
 
   it('flags a steep angle and too few pixels', () => {
@@ -322,8 +334,92 @@ describe('withMeasurement', () => {
   });
 });
 
+describe('turnPlane', () => {
+  const photo = { w: 1600, h: 1200 };
+  const sheet = { w: 297, h: 210 };
+  const corners = [
+    { x: 120, y: 90 },
+    { x: 1500, y: 140 },
+    { x: 1450, y: 1100 },
+    { x: 160, y: 1050 },
+  ];
+  const flat: PhotoMarks['scale'] = {
+    source: 'sheet',
+    p1: corners[0],
+    p2: corners[1],
+    mm: sheet.w,
+    sheet,
+  };
+  const plane = {
+    scale: flat,
+    homography: [...homography(corners, rectangle(sheet.w, sheet.h))!],
+  };
+  const inPhoto = (p: Point, size = photo) => turnPoint(size, 1, p);
+  const sideways = { w: photo.h, h: photo.w };
+
+  it('swaps the sides of the sheet and keeps the scale points the same distance apart', () => {
+    const { scale } = turnPlane(plane, photo);
+    expect(scale.sheet).toEqual({ w: 210, h: 297 });
+    expect(scale.p1).toEqual(inPhoto(corners[0]));
+    expect(scale.mm).toBe(sheet.w);
+  });
+
+  it('sends a turned pixel to the same spot of the turned sheet', () => {
+    const turned = turnPlane(plane, photo).homography!;
+    const p = { x: 700, y: 400 };
+    const expected = turnPoint(sheet, 1, applyHomography(plane.homography, p));
+    const seen = applyHomography(turned, inPhoto(p));
+    expect(seen.x).toBeCloseTo(expected.x, 6);
+    expect(seen.y).toBeCloseTo(expected.y, 6);
+  });
+
+  it('keeps the group and turns the offset clockwise with the picture', () => {
+    const target = {
+      aim: { x: 700, y: 500 },
+      holes: [
+        { x: 900, y: 500 },
+        { x: 900, y: 560 },
+      ],
+    };
+    const before = measureTarget(plane, target);
+    const after = measureTarget(turnPlane(plane, photo), {
+      aim: inPhoto(target.aim),
+      holes: target.holes.map((hole) => inPhoto(hole)),
+    });
+    expect(after.group).toBeCloseTo(before.group!, 6);
+    // What was to the right of the point of aim is now below it.
+    expect(after.offset!.offUp).toBeCloseTo(-before.offset!.offRight, 6);
+    expect(after.offset!.offRight).toBeCloseTo(before.offset!.offUp, 6);
+  });
+
+  it('comes back after four turns', () => {
+    const around = [photo, sideways, photo, sideways].reduce(
+      (current, size) => turnPlane(current, size),
+      plane as ReturnType<typeof turnPlane>,
+    );
+    expect(around.scale.p1.x).toBeCloseTo(corners[0].x, 6);
+    expect(around.scale.p1.y).toBeCloseTo(corners[0].y, 6);
+    expect(around.scale.sheet).toEqual(sheet);
+    around.homography!.forEach((value, i) => {
+      expect(value / around.homography![8]).toBeCloseTo(
+        plane.homography[i] / plane.homography[8],
+        6,
+      );
+    });
+  });
+
+  it('keeps a manual scale without a homography', () => {
+    const turned = turnPlane({ scale: manualScale }, photo);
+    expect(turned.homography).toBeUndefined();
+    expect(turned.scale.sheet).toBeUndefined();
+    expect(turned.scale.p1).toEqual(inPhoto(manualScale.p1));
+    expect(turned.scale.p2).toEqual(inPhoto(manualScale.p2));
+    expect(turned.scale.mm).toBe(manualScale.mm);
+  });
+});
+
 describe('templates', () => {
-  const four = BUILTIN_TARGETS[2];
+  const four = TEST_TARGETS[2];
 
   it('describes one', () => {
     expect(templateText(four)).toBe('A4 · 4 мишени · квадрат 30 мм');
@@ -363,7 +459,61 @@ describe('templates', () => {
     }));
     expect(matchesLayout(four, elements)).toBe(true);
     expect(matchesLayout(four, elements.slice(1))).toBe(false);
-    expect(matchesLayout(BUILTIN_TARGETS[0], elements)).toBe(false);
+    expect(matchesLayout(TEST_TARGETS[0], elements)).toBe(false);
+  });
+});
+
+describe('photosWithTemplate', () => {
+  it('counts marked photos across sessions, and only those of this template', () => {
+    const marks = (templateId?: string) => ({
+      id: 'p',
+      marks: { templateId, scale: manualScale, targets: [] },
+    });
+    const sessions = [
+      { photos: [marks('a'), marks('b'), { id: 'bare' }] },
+      { photos: [marks('a')] },
+      {},
+    ] as unknown as Session[];
+    expect(photosWithTemplate(sessions, 'a')).toBe(2);
+    expect(photosWithTemplate(sessions, 'c')).toBe(0);
+  });
+});
+
+describe('fitLayout', () => {
+  const layout = TEST_TARGETS.find((t) => t.id === 'std-skilled-3moa-100')!;
+  const sized = (x: number, y: number) => ({ x, y });
+
+  it('places a drawing printed lower on the sheet', () => {
+    const found = layout.targets.map((t) => sized(t.x, t.y + 43.5));
+    const [fit] = fitLayout(found, layout, [0], () => true, 18);
+    expect(fit.found).toBe(4);
+    expect(fit.shift.x).toBeCloseTo(0, 5);
+    expect(fit.shift.y).toBeCloseTo(43.5, 5);
+  });
+
+  it('places the targets it could not find next to those it could', () => {
+    const found = layout.targets.slice(1).map((t) => sized(t.x + 7, t.y + 30));
+    const [fit] = fitLayout(found, layout, [0], () => true, 18);
+    expect(fit.found).toBe(3);
+    expect(fit.matched[0]).toBeNull();
+    expect(fit.shift.x).toBeCloseTo(7, 5);
+  });
+
+  it('matches a drawing anywhere on the sheet, but only with the right layout', () => {
+    const found = layout.targets.map((t) => ({
+      x: t.x + 20,
+      y: t.y + 43.5,
+      kind: 'rings' as const,
+      size: 87.4,
+    }));
+    expect(matchesLayout(layout, found)).toBe(true);
+    expect(matchesLayout(layout, found.slice(1))).toBe(false);
+  });
+
+  it('keeps the numbers of a sheet turned a quarter clockwise', () => {
+    const { targets } = turnedTargets(layout, 1);
+    expect(targets[0].x).toBeGreaterThan(targets[2].x);
+    expect(targets[0].y).toBeLessThan(targets[1].y);
   });
 });
 

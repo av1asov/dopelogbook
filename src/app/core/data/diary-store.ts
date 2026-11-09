@@ -1,6 +1,5 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { Diary, Doc, TargetTemplate } from '../ballistics/model';
-import { BUILTIN_TARGETS } from '../target/measure';
 import { Snapshot } from './db';
 import { DocByKind, DocInput, DiaryRepository, DocKind, RestoreMode } from './repository';
 
@@ -21,10 +20,9 @@ export class DiaryStore {
   readonly ammo = computed(() => [...this.diary().ammo].sort(byCreation));
   readonly scopes = computed(() => [...this.diary().scopes].sort(byCreation));
   private readonly ownTargets = signal<TargetTemplate[]>([]);
-  readonly targets = computed(() => [
-    ...BUILTIN_TARGETS,
-    ...[...this.ownTargets()].sort(byCreation),
-  ]);
+  readonly targets = computed(() => [...this.ownTargets()].sort(byCreation));
+  /** Goes up when a stored photo changes under the same id. */
+  readonly photoRevision = signal(0);
 
   async init(): Promise<void> {
     void this.requestPersistence();
@@ -114,9 +112,10 @@ export class DiaryStore {
     return this.repository.putPhoto(blob);
   }
 
-  /** A retaken shot keeps the place of the old one. */
+  /** A retaken or turned shot keeps the place of the old one. */
   async replacePhoto(id: string, blob: Blob): Promise<void> {
     await this.repository.putPhoto(blob, id);
+    this.photoRevision.update((n) => n + 1);
   }
 
   removePhoto(id: string): Promise<void> {

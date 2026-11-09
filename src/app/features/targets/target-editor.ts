@@ -17,8 +17,10 @@ import {
   numText,
   parseNum,
   Point,
+  Polarity,
   SheetSize,
   TargetReference,
+  TargetRing,
   TargetTemplate,
   TemplateTarget,
 } from '../../core/ballistics';
@@ -26,28 +28,91 @@ import { DiaryStore } from '../../core/data/diary-store';
 import { shrinkPhoto } from '../../core/image';
 import { FlatImage, SurveyResult } from '../../core/target/detect';
 import { flatUrl, readPixels, TargetDetector } from '../../core/target/detector';
-import { referenceText, SHEETS } from '../../core/target/measure';
-import { ISSUE_TEXT } from '../../core/target/quality';
+import {
+  photosWithTemplate,
+  referenceText,
+  ringsReference,
+  SHEETS,
+} from '../../core/target/measure';
+import { issueText } from '../../core/target/quality';
 import { SignedInput } from '../../shared/signed-input';
 import { TargetPreview } from '../../shared/target-preview';
 import { Marker, TargetView } from '../../shared/target-view';
 
 type Kind = TargetReference['kind'];
-type Order = 'rows' | 'columns';
+type Order = 'rows' | 'columns' | 'printed';
+/** `line`: a thin printed circle, with nothing to tell about the sides of it. */
+type RingKind = TargetRing['edge'] | 'line';
+
+interface RingRow {
+  edge: RingKind;
+  d: string;
+  dIn: string;
+  dOut: string;
+}
+
+const emptyRing = (edge: RingKind = 'light-disc'): RingRow => ({ edge, d: '', dIn: '', dOut: '' });
 type Section = 'count' | 'reference' | 'aim' | 'order';
 
 const text = (value = '') => new FormControl(value, { nonNullable: true });
 
 const KINDS: readonly (readonly [Kind, string, string])[] = [
-  ['square', 'Квадрат', 'Сторона чёрного квадрата, мм'],
-  ['circle', 'Круг', 'Диаметр чёрного круга, мм'],
+  ['square', 'Квадрат', 'Сторона квадрата, мм'],
+  ['circle', 'Круг', 'Диаметр круга, мм'],
   ['grid', 'Сетка', 'Шаг сетки, мм'],
-  ['rings', 'Кольца', 'Диаметры колец через пробел, мм'],
+  ['rings', 'Кольца', ''],
 ];
+
+const RING_KINDS: readonly (readonly [RingKind, string])[] = [
+  ['light-disc', 'Граница светлого круга'],
+  ['dark-disc', 'Граница тёмного круга'],
+  ['light-ring', 'Белое кольцо'],
+  ['line', 'Тонкая линия'],
+];
+
+function ringRows(reference: Extract<TargetReference, { kind: 'rings' }>): RingRow[] {
+  if (!reference.rings) {
+    return reference.diameters.map((d) => ({ ...emptyRing('line'), d: numText(d) }));
+  }
+  return reference.rings.map((ring) =>
+    ring.edge === 'light-ring'
+      ? { ...emptyRing(ring.edge), dIn: numText(ring.dIn), dOut: numText(ring.dOut) }
+      : { ...emptyRing(ring.edge), d: numText(ring.d) },
+  );
+}
+
+function ringsFrom(rows: readonly RingRow[]): TargetReference | null {
+  const positive = (text: string) => {
+    const value = parseNum(text);
+    return value != null && value > 0 ? value : null;
+  };
+  const rings: TargetRing[] = [];
+  const lines: number[] = [];
+  for (const row of rows) {
+    if (row.edge === 'light-ring') {
+      const [dIn, dOut] = [positive(row.dIn), positive(row.dOut)];
+      if (dIn != null && dOut != null && dIn < dOut) rings.push({ edge: row.edge, dIn, dOut });
+      continue;
+    }
+    const d = positive(row.d);
+    if (d == null) continue;
+    if (row.edge === 'line') lines.push(d);
+    else rings.push({ edge: row.edge, d });
+  }
+  if (lines.length) {
+    const all = [
+      ...lines,
+      ...rings.flatMap((r) => (r.edge === 'light-ring' ? [r.dIn, r.dOut] : [r.d])),
+    ];
+    return { kind: 'rings', diameters: all.sort((a, b) => a - b) };
+  }
+  return rings.length ? ringsReference(rings) : null;
+}
 
 const ROW_GAP = 15;
 
 function numbered<T extends Point>(places: readonly T[], order: Order): T[] {
+  if (order === 'printed') return [...places];
   return [...places].sort((a, b) =>
     order === 'rows'
       ? Math.abs(a.y - b.y) < ROW_GAP
@@ -80,7 +145,7 @@ export class TargetEditor implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly detector = inject(TargetDetector);
 
-  /** Route parameter; absent for a new template. A standard one opens as a copy. */
+  /** Route parameter; absent for a new template. */
   readonly id = input<string>();
   /** The photo to take the template from, when opened from the marking screen. */
   readonly photo = input<Blob | null>(null);
@@ -90,6 +155,8 @@ export class TargetEditor implements OnInit, OnDestroy {
   readonly closed = output<void>();
 
   protected readonly kinds = KINDS;
+  protected readonly ringKinds = RING_KINDS;
+  protected readonly ringRows = signal<RingRow[]>([emptyRing()]);
   protected readonly sheets = SHEETS;
   protected readonly order = signal<Order>('rows');
   protected readonly open = signal<Section | null>(null);
@@ -104,6 +171,9 @@ export class TargetEditor implements OnInit, OnDestroy {
     rows: text('1'),
     kind: new FormControl<Kind>('square', { nonNullable: true }),
     size: text('25'),
+    polarity: new FormControl<Polarity>('dark', { nonNullable: true }),
+    artW: text(),
+    artH: text(),
     aimUp: text('0'),
     aimRight: text('0'),
   });
@@ -125,9 +195,13 @@ export class TargetEditor implements OnInit, OnDestroy {
   protected readonly error = signal<string | null>(null);
 
   protected readonly existing = computed(() =>
-    this.store.targets().find((t) => t.id === this.id() && !t.builtin),
+    this.store.targets().find((t) => t.id === this.id()),
   );
-  private readonly source = computed(() => this.store.targets().find((t) => t.id === this.id()));
+  /** Marked photos keep the id of their template, so it stays while there are any. */
+  protected readonly photoCount = computed(() => {
+    const existing = this.existing();
+    return existing ? photosWithTemplate(this.store.diary().sessions, existing.id) : 0;
+  });
 
   private readonly sheet = computed((): SheetSize => {
     const { sheetW, sheetH } = this.value();
@@ -139,20 +213,19 @@ export class TargetEditor implements OnInit, OnDestroy {
     return `${numText(w)} × ${numText(h)} мм — по этому размеру выпрямляется снимок`;
   });
 
-  private sizes(value: string): number[] {
-    return value
-      .split(/[\s;/]+/)
-      .map(parseNum)
-      .filter((n): n is number => n != null && n > 0);
-  }
+  private readonly artSize = computed((): SheetSize | null => {
+    const { artW, artH } = this.value();
+    const [w, h] = [parseNum(artW), parseNum(artH)];
+    return w != null && h != null && w > 0 && h > 0 ? { w, h } : null;
+  });
 
   private readonly reference = computed((): TargetReference | null => {
-    const { kind, size } = this.value();
-    const sizes = this.sizes(size);
-    if (!sizes.length) return null;
-    if (kind === 'rings') return { kind, diameters: sizes };
-    if (kind === 'grid') return { kind, step: sizes[0] };
-    return { kind, size: sizes[0] };
+    const { kind, size, polarity } = this.value();
+    if (kind === 'rings') return ringsFrom(this.ringRows());
+    const value = parseNum(size);
+    if (value == null || value <= 0) return null;
+    if (kind === 'grid') return { kind, step: value };
+    return { kind, size: value, ...(polarity === 'light' ? { polarity } : {}) };
   });
 
   private readonly targets = computed((): TemplateTarget[] => {
@@ -190,9 +263,11 @@ export class TargetEditor implements OnInit, OnDestroy {
     if (!centred) return 'смещена от центра';
     return kind === 'square' ? 'центр квадрата' : kind === 'circle' ? 'центр круга' : 'центр';
   });
-  protected readonly orderLabel = computed(() =>
-    this.order() === 'rows' ? 'слева направо, сверху вниз' : 'сверху вниз, слева направо',
-  );
+  protected readonly orderLabel = computed(() => {
+    const order = this.order();
+    if (order === 'printed') return 'как напечатано';
+    return order === 'rows' ? 'слева направо, сверху вниз' : 'сверху вниз, слева направо';
+  });
 
   private readonly flatShown = computed(() => (this.straight() ? this.flat() : null));
   protected readonly viewSrc = computed(() => (this.flatShown() ? this.flatSrc() : this.src()));
@@ -208,7 +283,11 @@ export class TargetEditor implements OnInit, OnDestroy {
     if (!flat || !this.survey()?.plane?.scale.sheet) return [];
     const reference = this.reference();
     const half =
-      reference?.kind === 'square' || reference?.kind === 'circle' ? reference.size / 2 + 4 : 15;
+      reference?.kind === 'square' || reference?.kind === 'circle'
+        ? reference.size / 2 + 4
+        : reference?.kind === 'rings'
+          ? Math.max(...reference.diameters) / 2 + 4
+          : 15;
     return this.targets().flatMap((t): Marker[] => {
       const x = (t.x - flat.x0) * flat.k;
       const y = (t.y - flat.y0) * flat.k;
@@ -237,7 +316,7 @@ export class TargetEditor implements OnInit, OnDestroy {
       return 'Не видно углов листа и нет карты в кадре. Снимите так, чтобы были видны 4 угла, или положите банковскую карту.';
     }
     const [issue] = result.quality?.issues ?? [];
-    if (issue) return ISSUE_TEXT[issue];
+    if (issue) return issueText(issue);
     return result.targets ? null : 'Мишени на листе не найдены. Задайте их ниже или переснимите.';
   });
 
@@ -247,7 +326,7 @@ export class TargetEditor implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    const source = this.source();
+    const source = this.existing();
     if (source) this.load(source);
     const photo = this.photo();
     if (photo) void this.usePhoto(photo);
@@ -261,20 +340,44 @@ export class TargetEditor implements OnInit, OnDestroy {
     const [first] = source.targets;
     const reference = first?.reference;
     this.form.patchValue({
-      name: source.builtin ? `${source.name} (копия)` : source.name,
+      name: source.name,
       sheetW: numText(source.sheet.w),
       sheetH: numText(source.sheet.h),
-      kind: reference?.kind ?? 'square',
-      size: !reference
-        ? ''
-        : reference.kind === 'rings'
-          ? reference.diameters.map(numText).join(' ')
-          : numText(reference.kind === 'grid' ? reference.step : reference.size),
+      artW: source.artSize ? numText(source.artSize.w) : '',
+      artH: source.artSize ? numText(source.artSize.h) : '',
       aimUp: numText(first?.aim?.up ?? 0),
       aimRight: numText(first?.aim?.right ?? 0),
     });
-    this.places.set(source.targets.map(({ x, y }) => ({ x, y })));
+    if (reference) this.applyReference(reference);
+    this.order.set(source.numbering === 'printed' ? 'printed' : 'rows');
+    this.places.set([...source.targets].sort((a, b) => a.n - b.n).map(({ x, y }) => ({ x, y })));
     this.syncPreset();
+  }
+
+  private applyReference(reference: TargetReference): void {
+    this.form.patchValue({ kind: reference.kind });
+    if (reference.kind === 'rings') {
+      this.ringRows.set(ringRows(reference));
+    } else if (reference.kind === 'grid') {
+      this.form.patchValue({ size: numText(reference.step) });
+    } else {
+      this.form.patchValue({
+        size: numText(reference.size),
+        polarity: reference.polarity ?? 'dark',
+      });
+    }
+  }
+
+  protected addRing(): void {
+    this.ringRows.update((rows) => [...rows, emptyRing()]);
+  }
+
+  protected removeRing(index: number): void {
+    this.ringRows.update((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  protected changeRing(index: number, change: Partial<RingRow>): void {
+    this.ringRows.update((rows) => rows.map((r, i) => (i === index ? { ...r, ...change } : r)));
   }
 
   private syncPreset(): void {
@@ -369,14 +472,7 @@ export class TargetEditor implements OnInit, OnDestroy {
     }
     const [first] = targets ?? [];
     if (!targets || !first) return;
-    const { reference } = first;
-    this.form.patchValue({
-      kind: reference.kind,
-      size:
-        reference.kind === 'rings'
-          ? reference.diameters.map(numText).join(' ')
-          : numText(reference.kind === 'grid' ? reference.step : reference.size),
-    });
+    this.applyReference(first.reference);
     this.places.set(targets.map(({ x, y }) => ({ x, y })));
   }
 
@@ -401,11 +497,14 @@ export class TargetEditor implements OnInit, OnDestroy {
       return;
     }
     const existing = this.existing();
+    const artSize = this.artSize();
     const template = await this.store.save('target', {
       ...(existing ? { id: existing.id, createdAt: existing.createdAt } : {}),
       name,
       sheet,
+      ...(artSize ? { artSize } : {}),
       targets,
+      ...(this.order() === 'printed' ? { numbering: 'printed' as const } : {}),
     });
     if (this.overlay()) this.saved.emit(template);
     else await this.router.navigate(['/more/targets']);
@@ -413,7 +512,7 @@ export class TargetEditor implements OnInit, OnDestroy {
 
   protected async remove(): Promise<void> {
     const existing = this.existing();
-    if (!existing) return;
+    if (!existing || this.photoCount()) return;
     await this.store.remove('target', existing.id);
     await this.router.navigate(['/more/targets']);
   }

@@ -9,7 +9,8 @@ import {
   WarpResult,
 } from './detect';
 import { Homography, homography, applyHomography, rectangle } from './homography';
-import { BUILTIN_TARGETS, measureTarget } from './measure';
+import { measureTarget } from './measure';
+import { TEST_TARGETS } from './testing/templates';
 
 type Cv = Parameters<typeof detectTarget>[0];
 
@@ -36,7 +37,7 @@ const A4 = { w: 210, h: 297 };
 const HOLE = 3.9;
 const PAPER = 225;
 const SQUARE = 25;
-const CENTRES: Point[] = BUILTIN_TARGETS[2].targets;
+const CENTRES: Point[] = TEST_TARGETS[2].targets;
 const inSquare = ({ x, y }: Point, c: Point, size: number) =>
   Math.abs(x - c.x) < size / 2 && Math.abs(y - c.y) < size / 2;
 
@@ -85,6 +86,45 @@ function photograph(
   }
   return { data, width, height };
 }
+
+const SKILLED = TEST_TARGETS.find((t) => t.id === 'std-skilled-3moa-100')!;
+const BROWN = 95;
+
+/** The Skilled Shooting drawing: `at` is in mm from its top left corner. */
+function skilledArt(at: Point): number | null {
+  for (const c of SKILLED.targets) {
+    const [dx, dy] = [at.x - c.x, at.y - c.y];
+    const r = Math.hypot(dx, dy);
+    if (r >= 43.7) continue;
+    if (r < 14.5) return Math.abs(dx) < 0.25 || Math.abs(dy) < 0.25 ? 90 : 240;
+    if (r > 25.9 && r < 29.4) return 240;
+    const cross = Math.abs(dx) < 0.35 || Math.abs(dy) < 0.35;
+    const grid = Math.abs(Math.abs(dx) - 28) < 0.3 || Math.abs(Math.abs(dy) - 28) < 0.3;
+    return cross || grid ? 240 : BROWN;
+  }
+  return null;
+}
+
+/** The drawing printed in the middle of A4, turned a quarter clockwise, at a given scale. */
+function skilledSheet(holes: readonly Point[], print = 1): Sheet {
+  const toArt = ({ x, y }: Point): Point => {
+    const [sx, sy] = [(x - 105) / print + 105, (y - 148.5) / print + 148.5 - 43.5];
+    return { x: sy, y: 210 - sx };
+  };
+  return (mm) => {
+    const art = skilledArt(toArt(mm));
+    if (holes.some((h) => Math.hypot(mm.x - h.x, mm.y - h.y) < HOLE)) {
+      return art != null && art < 150 ? 215 : 45;
+    }
+    return art ?? PAPER;
+  };
+}
+
+/** A point of the drawing on the sheet of `skilledSheet`. */
+const artOnSheet = ({ x, y }: Point, print = 1): Point => ({
+  x: (210 - y - 105) * print + 105,
+  y: (x + 43.5 - 148.5) * print + 148.5,
+});
 
 const WIDTH = 1300;
 const HEIGHT = 1700;
@@ -143,7 +183,7 @@ describe('detectTarget', () => {
     detectTarget(cv, {
       kind: 'measure',
       image,
-      template: BUILTIN_TARGETS[2],
+      template: TEST_TARGETS[2],
       manual: null,
       holeMm: HOLE * 2,
       shots: 5,
@@ -224,7 +264,7 @@ describe('detectTarget', () => {
       [110, 180],
     ].map(([x, y]) => ({ x, y }));
     const image = photograph(gridWithSquare(holes), A4, WIDTH, HEIGHT, view(frame));
-    const result = measure(image, { template: BUILTIN_TARGETS[0] });
+    const result = measure(image, { template: TEST_TARGETS[0] });
     expect(result.plane?.scale.source).toBe('element');
     expect(result.targets?.[0].holes).toHaveLength(5);
     expect(result.targets?.[0].aim).not.toBeNull();
@@ -239,7 +279,7 @@ describe('detectTarget', () => {
     ];
     const corner = [{ x: 92.5, y: 136 }];
     const image = photograph(gridWithSquare(corner), A4, WIDTH, HEIGHT, view(frame));
-    const result = measure(image, { template: BUILTIN_TARGETS[0], shots: 1 });
+    const result = measure(image, { template: TEST_TARGETS[0], shots: 1 });
     const aim = applyHomography(result.plane!.homography!, result.targets![0].aim!);
     expect(Math.hypot(aim.x - 105, aim.y - 148.5)).toBeLessThan(0.5);
     expect(result.quality?.issues).not.toContain('bent');
@@ -287,11 +327,115 @@ describe('detectTarget', () => {
       return diameters.some((d) => Math.abs(r - d / 2) < 0.6) ? 30 : PAPER;
     };
     const result = measure(photograph(sheet, A4, WIDTH, HEIGHT, view(STRAIGHT)), {
-      template: BUILTIN_TARGETS[1],
+      template: TEST_TARGETS[1],
     });
     const aim = applyHomography(result.plane!.homography!, result.targets![0].aim!);
     expect(aim.x).toBeCloseTo(105, 0);
     expect(aim.y).toBeCloseTo(148.5, 0);
+  });
+
+  describe('rings printed light on dark', () => {
+    const measureSkilled = (image: DetectImage, shots = 3) =>
+      measure(image, { template: SKILLED, shots });
+    const image = (holes: Point[] = [], print = 1) =>
+      photograph(skilledSheet(holes, print), A4, WIDTH, HEIGHT, view(TILTED));
+    const aimOf = (result: MeasureResult, n: number) =>
+      applyHomography(result.plane!.homography!, result.targets!.find((t) => t.n === n)!.aim!);
+
+    it('finds all four centres on a turned and tilted sheet', () => {
+      const result = measureSkilled(image());
+      expect(result.elements.filter((e) => e.kind === 'rings')).toHaveLength(4);
+      const aims = SKILLED.targets.map((target) => aimOf(result, target.n));
+      for (const target of SKILLED.targets) {
+        const expected = artOnSheet(target);
+        const nearest = Math.min(
+          ...aims.map((a) => Math.hypot(a.x - expected.x, a.y - expected.y)),
+        );
+        expect(nearest).toBeLessThan(1);
+      }
+      expect(result.quality?.issues).toEqual([]);
+    });
+
+    it('warns about a print at 95% and takes the size from the rings', () => {
+      const result = measureSkilled(image([], 0.95));
+      expect(result.quality?.issues).toContain('print-scale');
+      expect(result.quality?.issues).not.toContain('bent');
+      expect(result.quality?.printScale).toBeCloseTo(0.95, 1);
+      expect(result.plane?.scale.source).toBe('element');
+      const [a, b] = [aimOf(result, 1), aimOf(result, 2)];
+      expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeCloseTo(93.1, 0);
+    });
+
+    it('finds holes in the white centre, on the dark field and on the white ring', () => {
+      const [centre, field, ring] = [
+        artOnSheet({ x: 54, y: 62 }),
+        artOnSheet({ x: 58.4 + 16, y: 58.5 + 12 }),
+        artOnSheet({ x: 58.4, y: 58.5 - 27.6 }),
+      ];
+      const result = measureSkilled(image([centre, field, ring]));
+      // The rings are symmetric, so nothing tells which of the four is number 1.
+      const hit = result.targets!.filter((t) => t.holes.length);
+      expect(hit).toHaveLength(1);
+      const found = hit[0].holes.map((p) => applyHomography(result.plane!.homography!, p));
+      expect(found).toHaveLength(3);
+      for (const hole of [centre, field, ring]) {
+        const nearest = Math.min(...found.map((p) => Math.hypot(p.x - hole.x, p.y - hole.y)));
+        expect(nearest).toBeLessThan(1);
+      }
+    });
+
+    it('says the elements are missing instead of calling the sheet bent', () => {
+      const blank = photograph(
+        paper([], () => null),
+        A4,
+        WIDTH,
+        HEIGHT,
+        view(TILTED),
+      );
+      expect(measureSkilled(blank).quality?.issues).toEqual(['elements']);
+    });
+
+    it('proposes the rings from a blank sheet, light and dark', () => {
+      const survey = detectTarget(cv, {
+        kind: 'survey',
+        image: image(),
+        sheet: A4,
+      }) as SurveyResult;
+      expect(survey.targets).toHaveLength(4);
+      const reference = survey.targets![0].reference as { rings?: { edge: string }[] };
+      expect(reference.rings?.map((r) => r.edge)).toEqual([
+        'light-disc',
+        'light-ring',
+        'dark-disc',
+      ]);
+    });
+  });
+
+  it('finds a light circle on a dark field', () => {
+    const field = (p: Point) => Math.abs(p.x - 105) < 60 && Math.abs(p.y - 148.5) < 60;
+    const sheet = paper([], (p) => {
+      if (Math.hypot(p.x - 105, p.y - 148.5) < 15) return 235;
+      return field(p) ? 40 : null;
+    });
+    const template = {
+      sheet: A4,
+      targets: [
+        {
+          n: 1,
+          x: 105,
+          y: 148.5,
+          reference: { kind: 'circle' as const, size: 30, polarity: 'light' as const },
+          aim: { up: 0, right: 0 },
+        },
+      ],
+    };
+    const result = measure(photograph(sheet, A4, WIDTH, HEIGHT, view(STRAIGHT)), {
+      template,
+      shots: 1,
+    });
+    const aim = applyHomography(result.plane!.homography!, result.targets![0].aim!);
+    expect(Math.hypot(aim.x - 105, aim.y - 148.5)).toBeLessThan(1);
+    expect(result.quality?.issues).toEqual([]);
   });
 
   it('flags the extras when there are more holes than shots', () => {

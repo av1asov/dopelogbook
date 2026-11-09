@@ -5,18 +5,31 @@
       <b>{{ sheetMode() ? context().sheetTitle : context().title }}</b>
       <span>{{ sheetMode() ? context().sheetSubtitle : context().subtitle }}</span>
     </span>
-    <button
-      type="button"
-      class="icon"
-      aria-label="Лупа"
-      [attr.aria-pressed]="loupe()"
-      (click)="loupe.set(!loupe())"
-    >
-      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="10" cy="10" r="6.5" />
-        <path d="M15 15l6 6M10 7v6M7 10h6" />
-      </svg>
-    </button>
+    <span class="actions">
+      <button
+        type="button"
+        class="icon"
+        aria-label="Повернуть снимок на 90° по часовой стрелке"
+        [disabled]="!src() || !!busy()"
+        (click)="turnPhoto()"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 3.5v5h-5" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="icon"
+        aria-label="Лупа"
+        [attr.aria-pressed]="loupe()"
+        (click)="loupe.set(!loupe())"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="10" cy="10" r="6.5" />
+          <path d="M15 15l6 6M10 7v6M7 10h6" />
+        </svg>
+      </button>
+    </span>
   </header>
 
   @if (!sheetMode()) {
@@ -47,6 +60,9 @@
     }
     @if (sheetMode() && status(); as line) {
       <span class="status">{{ line }}</span>
+    }
+    @if (canTurnNumbers()) {
+      <button type="button" class="turn-numbers" (click)="turnNumbers()">⟳ Номера</button>
     }
   </div>
 
