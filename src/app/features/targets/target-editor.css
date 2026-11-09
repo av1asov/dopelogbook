@@ -168,3 +168,9 @@ app-target-view {
   color: var(--ink-2);
   font-size: 20px;
 }
+
+.by-hand {
+  border-color: var(--pen);
+  color: var(--pen);
+  font-weight: 700;
+}

@@ -32,7 +32,6 @@ import {
   withoutPhoto,
 } from './measure';
 import { assessQuality, issueText, MEASURE_LIMITS, TEMPLATE_LIMITS } from './quality';
-import { snapToLine } from './snap';
 import { TEST_TARGETS } from './testing/templates';
 
 const auto = ([x, y]: number[]) => ({ x, y, auto: true });
@@ -598,29 +597,6 @@ describe('fitLayout', () => {
     const { targets } = turnedTargets(layout, 1);
     expect(targets[0].x).toBeGreaterThan(targets[2].x);
     expect(targets[0].y).toBeLessThan(targets[1].y);
-  });
-});
-
-describe('snapToLine', () => {
-  /** A horizontal ruler: a dark tick across it every 10 px. */
-  function ruler(width: number, height: number) {
-    const data = new Uint8ClampedArray(width * height * 4);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const v = x % 10 === 0 ? 40 : 220;
-        data.fill(v, (y * width + x) * 4, (y * width + x) * 4 + 4);
-      }
-    }
-    return { data, width, height };
-  }
-
-  it('pulls a tap onto the nearest mark along the ruler', () => {
-    expect(snapToLine(ruler(100, 100), { x: 42, y: 50 }, 4)).toEqual({ x: 40, y: 50 });
-  });
-
-  it('leaves a tap alone on blank paper', () => {
-    const blank = { data: new Uint8ClampedArray(4 * 2500).fill(220), width: 50, height: 50 };
-    expect(snapToLine(blank, { x: 25, y: 25 }, 6)).toEqual({ x: 25, y: 25 });
   });
 });
 

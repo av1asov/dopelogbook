@@ -1,0 +1,159 @@
+<div class="manual" role="dialog" aria-label="Разметить вручную">
+  <header>
+    <button type="button" (click)="closed.emit()">‹ Назад</button>
+    <b>Разметить вручную</b>
+    <button type="button" class="strong" (click)="finish()">Готово</button>
+  </header>
+
+  <div class="dark">
+    <span class="tabs" role="tablist">
+      @for (tab of tabs(); track tab.step) {
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="step() === tab.step"
+          (click)="goTo(tab.step)"
+        >
+          {{ tab.label }}{{ tab.done ? ' ✓' : '' }}
+        </button>
+      }
+    </span>
+
+    <div class="stage">
+      <app-target-view
+        [src]="viewSrc()"
+        [width]="viewWidth()"
+        [height]="viewHeight()"
+        [aspect]="1"
+        [markers]="markers()"
+        [segments]="segments()"
+        [full]="full()"
+        (added)="added($event)"
+        (refused)="refused()"
+        (selected)="selectedMark.set($event)"
+        (moved)="moved($event)"
+        (removed)="removeMark($event)"
+      />
+      <app-undo-toast />
+    </div>
+    <p class="prompt">{{ busy() ? 'Выпрямляю…' : prompt() }}</p>
+  </div>
+
+  <main>
+    @if (error(); as message) {
+      <p class="error">{{ message }}</p>
+    }
+
+    @switch (step()) {
+      @case ('corners') {
+        <p>Перетащите маркеры на углы листа. Под пальцем лупа.</p>
+        @if (noCorners()) {
+          <div class="box warn">
+            Лист не виден целиком? Пропустите шаг, но без углов перспектива не исправлена: снимать
+            нужно строго сверху.
+          </div>
+        }
+        <button type="button" class="wide" (click)="resetCorners()">Сбросить углы</button>
+      }
+      @case ('scale') {
+        <p>
+          Поставьте две точки на концах известного размера — край круга, деления линейки, сторону
+          квадрата. Тяните точку: под пальцем лупа.
+        </p>
+        <label class="field">
+          Длина отрезка, мм
+          <input
+            inputmode="decimal"
+            autocomplete="off"
+            [value]="mmText()"
+            (input)="mmText.set($any($event.target).value)"
+          />
+        </label>
+        @if (readingText(); as text) {
+          <div class="box">
+            <span>
+              Масштаб: <b class="num">{{ text.scale }}</b> · точность ≈
+              <b class="num">{{ text.error }}</b>
+            </span>
+            @if (check(); as sheet) {
+              @if (sheet.off) {
+                <span class="bad">Сверка по листу {{ sheet.text }} — расхождение больше 2 %</span>
+              } @else {
+                <span class="good">Сверка по листу {{ sheet.text }} ✓</span>
+              }
+            }
+          </div>
+        }
+        @if (tooShort()) {
+          <div class="box warn">Отрезок короче 50 мм: масштаб будет менее точным.</div>
+        }
+        @if (noCorners()) {
+          <div class="box warn">Без углов перспектива не исправлена — снимайте строго сверху.</div>
+        }
+        <span class="small"
+          >Чем длиннее отрезок, тем точнее. Короче 50 мм — приложение предупредит.</span
+        >
+        <button type="button" class="wide" [disabled]="!segment().length" (click)="resetSegment()">
+          Сбросить отрезок
+        </button>
+      }
+      @case ('targets') {
+        <p>
+          Коснитесь центра каждой мишени по порядку номеров. У первой растяните рамку по краю
+          элемента.
+        </p>
+        <div class="row">
+          <span>Мишеней на листе</span>
+          <span class="stepper">
+            <button
+              type="button"
+              aria-label="Меньше мишеней"
+              [disabled]="centres().length <= 1"
+              (click)="resize(centres().length - 1)"
+            >
+              −
+            </button>
+            <b class="num">{{ centres().length }}</b>
+            <button
+              type="button"
+              aria-label="Больше мишеней"
+              (click)="resize(centres().length + 1)"
+            >
+              +
+            </button>
+          </span>
+        </div>
+        <div class="row">
+          <span class="seg">
+            <button
+              type="button"
+              [attr.aria-pressed]="kind() === 'circle'"
+              (click)="kind.set('circle')"
+            >
+              Круг
+            </button>
+            <button
+              type="button"
+              [attr.aria-pressed]="kind() === 'square'"
+              (click)="kind.set('square')"
+            >
+              Квадрат
+            </button>
+          </span>
+          @if (sizeText(); as size) {
+            <b class="num">{{ size }}</b>
+          }
+        </div>
+        <button type="button" class="wide" [attr.aria-pressed]="placingAim()" (click)="toggleAim()">
+          {{ aim() ? 'Точка прицеливания — в центр' : 'Точка прицеливания не в центре' }}
+        </button>
+      }
+    }
+
+    @if (canRemoveSelected()) {
+      <button type="button" class="wide drop" (click)="removeMark($any(selectedMark()))">
+        Удалить точку
+      </button>
+    }
+  </main>
+</div>

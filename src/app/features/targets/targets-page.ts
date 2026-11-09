@@ -19,10 +19,11 @@ export class TargetsPage {
     const { sessions } = this.store.diary();
     return this.store.targets().map((target) => {
       const photos = photosWithTemplate(sessions, target.id);
+      const note = photos ? `${photos} фото` : 'не используется';
       return {
         target,
         specs: templateText(target),
-        note: photos ? `${photos} фото` : 'не используется',
+        note: target.scale?.source === 'manual' ? `${note} · масштаб вручную` : note,
       };
     });
   });
