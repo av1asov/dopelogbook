@@ -408,6 +408,23 @@ describe('turnPlane', () => {
     });
   });
 
+  it('makes three turns at once the same as one by one', () => {
+    const stepped = [photo, sideways, photo].reduce(
+      (current, size) => turnPlane(current, size),
+      plane as ReturnType<typeof turnPlane>,
+    );
+    const direct = turnPlane(plane, photo, 3);
+    expect(direct.scale.p1.x).toBeCloseTo(stepped.scale.p1.x, 6);
+    expect(direct.scale.p1.y).toBeCloseTo(stepped.scale.p1.y, 6);
+    expect(direct.scale.sheet).toEqual(stepped.scale.sheet);
+    direct.homography!.forEach((value, i) => {
+      expect(value / direct.homography![8]).toBeCloseTo(
+        stepped.homography![i] / stepped.homography![8],
+        6,
+      );
+    });
+  });
+
   it('keeps a manual scale without a homography', () => {
     const turned = turnPlane({ scale: manualScale }, photo);
     expect(turned.homography).toBeUndefined();

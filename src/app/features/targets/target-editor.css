@@ -25,12 +25,44 @@
 .photo {
   display: flex;
   justify-content: center;
-  padding: 10px 0;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
   background: #1d221f;
 }
 
+.turn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1.5px solid #56605a;
+  border-radius: 8px;
+  background: transparent;
+  color: #f5f6f2;
+}
+
+.turn:disabled {
+  opacity: 0.4;
+}
+
+.turn svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
 app-target-view {
-  width: min(190px, 100%);
+  width: 170px;
+  min-width: 0;
+}
+
+/* A sheet on its side keeps about the same scale as an upright one. */
+.photo.wide app-target-view {
+  width: 236px;
 }
 
 .start {

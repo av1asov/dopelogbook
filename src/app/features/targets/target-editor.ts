@@ -25,7 +25,7 @@ import {
   TemplateTarget,
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
-import { shrinkPhoto } from '../../core/image';
+import { shrinkPhoto, turnedPhoto } from '../../core/image';
 import { FlatImage, SurveyResult } from '../../core/target/detect';
 import { flatUrl, readPixels, TargetDetector } from '../../core/target/detector';
 import {
@@ -33,6 +33,9 @@ import {
   referenceText,
   ringsReference,
   SHEETS,
+  turnAim,
+  turnPlane,
+  turnPoint,
 } from '../../core/target/measure';
 import { issueText } from '../../core/target/quality';
 import { SignedInput } from '../../shared/signed-input';
@@ -132,6 +135,12 @@ function evenPlaces(sheet: SheetSize, columns: number, rows: number): Point[] {
   }));
 }
 
+export interface SavedTarget {
+  template: TargetTemplate;
+  /** Quarter turns clockwise given to the photo that was passed in. */
+  turns: number;
+}
+
 /** Screen 16: a template, proposed from a photo of a blank sheet or filled in by hand. */
 @Component({
   selector: 'app-target-editor',
@@ -151,7 +160,7 @@ export class TargetEditor implements OnInit, OnDestroy {
   readonly photo = input<Blob | null>(null);
   readonly overlay = input(false);
 
-  readonly saved = output<TargetTemplate>();
+  readonly saved = output<SavedTarget>();
   readonly closed = output<void>();
 
   protected readonly kinds = KINDS;
@@ -189,8 +198,12 @@ export class TargetEditor implements OnInit, OnDestroy {
   protected readonly flatSrc = signal<string | null>(null);
   private readonly imageSize = signal({ w: 0, h: 0 });
   protected readonly straight = signal(true);
-  protected readonly busy = signal(false);
+  protected readonly busy = signal<string | null>(null);
   private readonly survey = signal<SurveyResult | null>(null);
+  /** The shot before turning; every turn starts from it, to re-encode only once. */
+  private source: Blob | undefined;
+  private turns = 0;
+  private generation = 0;
   protected readonly confirmingDelete = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -333,6 +346,7 @@ export class TargetEditor implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.generation++;
     for (const url of [this.src(), this.flatSrc()]) if (url) URL.revokeObjectURL(url);
   }
 
@@ -426,20 +440,82 @@ export class TargetEditor implements OnInit, OnDestroy {
   }
 
   private async usePhoto(blob: Blob): Promise<void> {
+    this.source = blob;
+    this.turns = 0;
     this.blob.set(blob);
     const bitmap = await createImageBitmap(blob);
-    this.imageSize.set({ w: bitmap.width, h: bitmap.height });
+    const size = { w: bitmap.width, h: bitmap.height };
     bitmap.close();
+    this.showPhoto(blob, size);
+    await this.runSurvey();
+  }
+
+  private showPhoto(blob: Blob, size: SheetSize): void {
+    this.imageSize.set(size);
     const old = this.src();
     if (old) URL.revokeObjectURL(old);
     this.src.set(URL.createObjectURL(blob));
-    await this.runSurvey();
+  }
+
+  /** Photo and layout turn together; finding them anew would undo what was edited by hand. */
+  protected async turnPhoto(quarters: 1 | 3): Promise<void> {
+    const { source } = this;
+    if (!source || !this.blob() || this.busy()) return;
+    const generation = ++this.generation;
+    this.busy.set('Поворачиваю снимок…');
+    this.error.set(null);
+    try {
+      const photo = this.imageSize();
+      const turns = (this.turns + quarters) % 4;
+      const blob = turns ? await turnedPhoto(source, turns) : source;
+      const found = this.survey();
+      const plane = found?.plane ? turnPlane(found.plane, photo, quarters) : null;
+      const flat = plane?.homography
+        ? (
+            await this.detector.warp({
+              kind: 'warp',
+              image: await readPixels(blob),
+              homography: plane.homography,
+              sheet: plane.scale.sheet,
+            })
+          ).flat
+        : null;
+      if (generation !== this.generation) return;
+      this.turns = turns;
+      this.blob.set(blob);
+      this.showPhoto(blob, { w: photo.h, h: photo.w });
+      await this.showFlat(flat);
+      if (found) this.survey.set({ ...found, plane, flat });
+      this.turnLayout(quarters);
+    } catch {
+      if (generation === this.generation) this.error.set('Не удалось повернуть снимок.');
+    } finally {
+      if (generation === this.generation) this.busy.set(null);
+    }
+  }
+
+  private turnLayout(quarters: number): void {
+    const sheet = this.sheet();
+    const { columns, rows, artW, artH, aimUp, aimRight } = this.value();
+    const aim = turnAim({ up: parseNum(aimUp) ?? 0, right: parseNum(aimRight) ?? 0 }, quarters);
+    this.places.update((places) => places.map((place) => turnPoint(sheet, quarters, place)));
+    this.form.patchValue({
+      sheetW: numText(sheet.h),
+      sheetH: numText(sheet.w),
+      columns: rows,
+      rows: columns,
+      artW: artH,
+      artH: artW,
+      aimUp: numText(aim.up),
+      aimRight: numText(aim.right),
+    });
   }
 
   private async runSurvey(): Promise<void> {
     const blob = this.blob();
     if (!blob) return;
-    this.busy.set(true);
+    this.generation++;
+    this.busy.set('Ищу лист и мишени…');
     this.error.set(null);
     try {
       const result = await this.detector.survey({
@@ -454,7 +530,7 @@ export class TargetEditor implements OnInit, OnDestroy {
       this.error.set('Автопоиск недоступен — задайте мишени вручную.');
       this.blob.set(null);
     } finally {
-      this.busy.set(false);
+      this.busy.set(null);
     }
   }
 
@@ -506,8 +582,10 @@ export class TargetEditor implements OnInit, OnDestroy {
       targets,
       ...(this.order() === 'printed' ? { numbering: 'printed' as const } : {}),
     });
-    if (this.overlay()) this.saved.emit(template);
-    else await this.router.navigate(['/more/targets']);
+    if (this.overlay()) {
+      // After «Переснять» the turns belong to another shot.
+      this.saved.emit({ template, turns: this.source === this.photo() ? this.turns : 0 });
+    } else await this.router.navigate(['/more/targets']);
   }
 
   protected async remove(): Promise<void> {

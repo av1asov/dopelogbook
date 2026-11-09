@@ -65,7 +65,7 @@ import {
 import { issueText, Quality } from '../../core/target/quality';
 import { snapToLine } from '../../core/target/snap';
 import { Marker, Segment, TargetTap, TargetView } from '../../shared/target-view';
-import { TargetEditor } from '../targets/target-editor';
+import { SavedTarget, TargetEditor } from '../targets/target-editor';
 import { TargetPicker } from './target-picker';
 
 export interface MeasureContext {
@@ -575,17 +575,17 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     return flat;
   }
 
-  /** A quarter turn clockwise, marks included. */
-  protected async turnPhoto(): Promise<void> {
+  /** Quarter turns clockwise, marks included. */
+  protected async turnPhoto(quarters = 1): Promise<void> {
     if (!this.source || this.busy() || this.saving) return;
     const generation = ++this.generation;
     this.busy.set('Поворачиваю снимок…');
     try {
-      const turns = (this.turns + 1) % 4;
+      const turns = (this.turns + quarters) % 4;
       const blob = turns ? await turnedPhoto(this.source, turns) : this.source;
       const photo = { w: this.imageWidth(), h: this.imageHeight() };
       const marks = this.marks();
-      const plane = marks && turnPlane(marks, photo);
+      const plane = marks && turnPlane(marks, photo, quarters);
       const flat = plane?.homography
         ? await this.rectified(blob, plane.homography, plane.scale.sheet)
         : null;
@@ -595,7 +595,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
       this.pixels = null;
       await this.loadPhoto();
       await this.showFlat(flat);
-      const turn = (p: Point): Point => turnPoint(photo, 1, p);
+      const turn = (p: Point): Point => turnPoint(photo, quarters, p);
       if (plane) {
         this.scale.set(plane.scale);
         this.matrix.set(plane.homography);
@@ -659,9 +659,11 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     this.creating.set(this.blob ?? null);
   }
 
-  protected templateSaved(template: TargetTemplate): void {
+  /** The photo follows the turn made in the editor, or the numbers would not match it. */
+  protected async templateSaved({ template, turns }: SavedTarget): Promise<void> {
     this.creating.set(null);
-    void this.applyTemplate(template.id);
+    if (turns) await this.turnPhoto(turns);
+    await this.applyTemplate(template.id);
   }
 
   protected async retake(event: Event): Promise<void> {

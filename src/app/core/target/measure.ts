@@ -256,28 +256,39 @@ export function turnPoint({ w, h }: SheetSize, turns: number, { x, y }: Point): 
 type PhotoPlane = Pick<PhotoMarks, 'scale' | 'homography'>;
 
 /**
- * The plane of a photo after a quarter turn clockwise. The millimetres turn too: up on the plane
+ * The plane of a photo after quarter turns clockwise. The millimetres turn too: up on the plane
  * has to stay up on the picture, or the offsets would point the old way.
  */
-export function turnPlane({ scale, homography: matrix }: PhotoPlane, photo: SheetSize): PhotoPlane {
-  const inPixels = (p: Point) => turnPoint(photo, 1, p);
+export function turnPlane(
+  { scale, homography: matrix }: PhotoPlane,
+  photo: SheetSize,
+  turns = 1,
+): PhotoPlane {
+  const inPixels = (p: Point) => turnPoint(photo, turns, p);
   const { sheet } = scale;
   const corners = rectangle(photo.w, photo.h);
   const turned =
     matrix &&
     homography(
       corners.map(inPixels),
-      corners.map((p) => turnPoint(sheet ?? { w: 0, h: 0 }, 1, applyHomography(matrix, p))),
+      corners.map((p) => turnPoint(sheet ?? { w: 0, h: 0 }, turns, applyHomography(matrix, p))),
     );
   return {
     scale: {
       ...scale,
       p1: inPixels(scale.p1),
       p2: inPixels(scale.p2),
-      ...(sheet ? { sheet: { w: sheet.h, h: sheet.w } } : {}),
+      ...(sheet ? { sheet: turns % 2 ? { w: sheet.h, h: sheet.w } : sheet } : {}),
     },
     ...(turned ? { homography: [...turned] } : {}),
   };
+}
+
+/** The point of aim, relative to its target, after quarter turns clockwise. */
+export function turnAim(aim: { up: number; right: number }, turns: number) {
+  if (turns === 1) return { up: -aim.right, right: aim.up };
+  if (turns === 2) return { up: -aim.up, right: -aim.right };
+  return turns === 3 ? { up: aim.right, right: -aim.up } : aim;
 }
 
 /** Where the targets of a template land when the sheet is turned by quarter turns. */
@@ -286,18 +297,12 @@ export function turnedTargets(
   turns: number,
 ): { sheet: SheetSize; targets: TemplateTarget[] } {
   const { w, h } = template.sheet;
-  const turnAim = (aim: TemplateTarget['aim']): TemplateTarget['aim'] => {
-    if (!aim) return aim;
-    if (turns === 1) return { up: -aim.right, right: aim.up };
-    if (turns === 2) return { up: -aim.up, right: -aim.right };
-    return turns === 3 ? { up: aim.right, right: -aim.up } : aim;
-  };
   return {
     sheet: turns % 2 ? { w: h, h: w } : { w, h },
     targets: template.targets.map((t) => ({
       ...t,
       ...turnPoint(template.sheet, turns, t),
-      aim: turnAim(t.aim),
+      aim: t.aim && turnAim(t.aim, turns),
     })),
   };
 }
