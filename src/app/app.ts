@@ -10,6 +10,7 @@ import {
 } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { AppUpdate } from './core/app-update';
+import { KeyboardInset } from './core/keyboard';
 
 function deepestChild(route: ActivatedRouteSnapshot): ActivatedRouteSnapshot {
   return route.firstChild ? deepestChild(route.firstChild) : route;
@@ -25,6 +26,10 @@ function deepestChild(route: ActivatedRouteSnapshot): ActivatedRouteSnapshot {
 export class App {
   private readonly router = inject(Router);
   protected readonly update = inject(AppUpdate);
+
+  constructor() {
+    inject(KeyboardInset).start();
+  }
 
   protected readonly hideTabs = toSignal(
     this.router.events.pipe(
