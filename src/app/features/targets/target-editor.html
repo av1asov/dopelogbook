@@ -7,7 +7,7 @@
 
   @if (viewSrc(); as url) {
     <div class="strip">
-      <span class="status">{{ busy() ? 'Ищу лист и мишени…' : statusText() }}</span>
+      <span class="status">{{ busy() ?? statusText() }}</span>
       @if (flatSrc()) {
         <span class="view-seg">
           <button type="button" [attr.aria-pressed]="straight()" (click)="straight.set(true)">
@@ -19,7 +19,19 @@
         </span>
       }
     </div>
-    <div class="photo">
+    <div class="photo" [class.wide]="viewAspect() > 1">
+      <button
+        type="button"
+        class="turn"
+        aria-label="Повернуть на 90° против часовой"
+        [disabled]="!blob() || !!busy()"
+        (click)="turnPhoto(3)"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 12a8 8 0 1 0 2.3-5.7" />
+          <path d="M4 3v5h5" />
+        </svg>
+      </button>
       <app-target-view
         [src]="url"
         [width]="viewWidth()"
@@ -27,6 +39,18 @@
         [aspect]="viewAspect()"
         [markers]="markers()"
       />
+      <button
+        type="button"
+        class="turn"
+        aria-label="Повернуть на 90° по часовой"
+        [disabled]="!blob() || !!busy()"
+        (click)="turnPhoto(1)"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 12a8 8 0 1 1-2.3-5.7" />
+          <path d="M20 3v5h-5" />
+        </svg>
+      </button>
     </div>
   } @else {
     <div class="start">
@@ -271,6 +295,10 @@
     </div>
 
     <p class="hint">
+      @if (blob()) {
+        Поверните снимок так, как мишень висит на щите — от этого зависят номера мишеней и
+        «вверх/вниз».
+      }
       Размер опорного элемента измерен по листу — проверьте. Если углы листа не видны, положите на
       мишень банковскую карту: 85,6 × 54 мм. Снимайте основной камерой.
     </p>
