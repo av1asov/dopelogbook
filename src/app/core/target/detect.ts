@@ -21,6 +21,7 @@ import {
   solve,
   tiltDegrees,
 } from './homography';
+import { CleanPicture, findHoles } from './holes';
 import { assignToTargets, distance, fitLayout, FoundElement } from './measure';
 import {
   assessQuality,
@@ -52,6 +53,16 @@ export interface MeasureRequest {
   holeMm: number;
   /** Shots per target. */
   shots: number | null;
+  /** The template's picture of the sheet before any shots. */
+  clean?: CleanSheet | null;
+}
+
+/** Rectified like `FlatImage`: a millimetre of the template is at ((x − x0)·k, (y − y0)·k). */
+export interface CleanSheet {
+  image: DetectImage;
+  x0: number;
+  y0: number;
+  k: number;
 }
 
 export interface SurveyRequest {
@@ -138,7 +149,12 @@ const FLAT_MAX_PX = 2600;
 const FLAT_REACH_MM = 400;
 const FLAT_BACKGROUND = 60;
 const MIN_HOLE_PX = 6;
-const MAX_MERGED = 4;
+/** Closing that joins the pieces of a printed disc, as shares of the picture; smallest first. */
+const DISC_CLOSING = [0.012, 0.016, 0.02, 0.024];
+const MIN_DISC_SHARE = 0.1;
+const DISC_FIT = 0.12;
+const DISC_SAME = 0.2;
+const LAYOUT_FIT = 0.08;
 /** How far from its place in the template an element may lie, mm. */
 const ELEMENT_REACH = 18;
 const MIN_ELEMENT_MM = 8;
@@ -643,10 +659,68 @@ function ringsPlane(
   return circlePlane(centre, match.radius, nearest, aim);
 }
 
+/** Big dark ellipses of one size: printed discs, however they are cut up by white lines. */
+function darkDiscs(cv: Cv, gray: Mat, count: number, scope: Scope): Point[] | null {
+  const dark = scope.own(new cv.Mat());
+  cv.threshold(gray, dark, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+  const side = Math.min(gray.cols, gray.rows);
+  for (const share of DISC_CLOSING) {
+    const size = odd(side * share);
+    const kernel = scope.own(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(size, size)));
+    const closed = scope.own(new cv.Mat());
+    cv.morphologyEx(dark, closed, cv.MORPH_CLOSE, kernel);
+    const { contours, outer } = components(cv, closed, scope);
+    const discs: { centre: Point; area: number }[] = [];
+    for (const i of outer) {
+      const contour = scope.own(contours.get(i));
+      const area = cv.contourArea(contour);
+      if (area < (side * MIN_DISC_SHARE) ** 2 || contour.rows < 5) continue;
+      const fit = cv.fitEllipse(contour);
+      const full = (Math.PI * fit.size.width * fit.size.height) / 4;
+      if (Math.abs(area / full - 1) > DISC_FIT) continue;
+      discs.push({ centre: { x: fit.center.x, y: fit.center.y }, area });
+    }
+    if (discs.length !== count) continue;
+    const middle = median(discs.map((d) => d.area));
+    if (discs.every((d) => Math.abs(d.area / middle - 1) < DISC_SAME)) {
+      return discs.map((d) => d.centre);
+    }
+  }
+  return null;
+}
+
+/** The corner of a layout each corner of the picture stands for, and how well the rest fits. */
+function layoutPlane(found: readonly Point[], layout: Layout, scope: Scope, cv: Cv): Plane | null {
+  const places = layout.targets.map(({ x, y }) => ({ x, y }));
+  const from = orderCorners(found);
+  const to = orderCorners(places);
+  const matrix = homography(from, to);
+  if (!matrix) return null;
+  const onPlane = found.map((p) => applyHomography(matrix, p));
+  const tolerance = Math.max(...places.map((p) => distance(p, places[0]))) * LAYOUT_FIT;
+  if (places.some((p) => !onPlane.some((q) => distance(p, q) < tolerance))) return null;
+  const refined = found.length > 4 ? fitHomography(cv, [...found], places, scope) : matrix;
+  if (!refined) return null;
+  return {
+    scale: { source: 'targets', p1: from[0], p2: from[1], mm: distance(to[0], to[1]) },
+    homography: [...refined],
+    turns: [0],
+  };
+}
+
+/** The sheet is out of the shot, but the targets on it tell the perspective themselves. */
+function targetsPlane(cv: Cv, gray: Mat, layout: Layout, scope: Scope): Plane | null {
+  const reference = layout.targets[0].reference;
+  if (reference.kind !== 'rings' && reference.kind !== 'circle') return null;
+  const found = darkDiscs(cv, gray, layout.targets.length, scope);
+  return found && layoutPlane(found, layout, scope, cv);
+}
+
 function elementPlane(cv: Cv, gray: Mat, layout: Layout, scope: Scope): Plane | null {
   const [first] = layout.targets;
   if (!first) return null;
   if (first.reference.kind === 'square') return squaresPlane(cv, gray, layout, scope);
+  if (layout.targets.length >= 4) return targetsPlane(cv, gray, layout, scope);
   if (layout.targets.length > 1) return null;
   const { reference, aim } = first;
   switch (reference.kind) {
@@ -1107,6 +1181,7 @@ function matchesReference(element: PlaneElement, target: TemplateTarget): boolea
 
 interface Located {
   n: number;
+  centre: Point;
   aim: Point | null;
   element: PlaneElement | null;
   target: TemplateTarget;
@@ -1135,178 +1210,12 @@ function locate(
     const centre: Point = element ?? { x: target.x + shift.x, y: target.y + shift.y };
     return {
       n: target.n,
+      centre,
       element,
       target,
       aim: target.aim ? { x: centre.x + target.aim.right, y: centre.y - target.aim.up } : null,
     };
   });
-}
-
-/** Where a hole shows light, because the print there is dark, by the rings of each target. */
-function ringFields(cv: Cv, gray: Mat, located: readonly Located[], view: PlaneView, scope: Scope) {
-  let mask: Mat | null = null;
-  for (const { element, target } of located) {
-    const { reference } = target;
-    if (element?.kind !== 'rings' || reference.kind !== 'rings' || !reference.rings) continue;
-    mask ??= scope.own(cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1));
-    const centre = new cv.Point(
-      Math.round((element.x - view.x0) * view.k),
-      Math.round((element.y - view.y0) * view.k),
-    );
-    const k = view.k * (element.ringScale ?? 1);
-    const fill = (diameter: number, value: number) =>
-      cv.circle(
-        mask as Mat,
-        centre,
-        Math.round((diameter / 2) * k),
-        new cv.Scalar(value),
-        cv.FILLED,
-      );
-    const outerFirst = [...reference.rings].sort(
-      (a, b) => (b.edge === 'light-ring' ? b.dOut : b.d) - (a.edge === 'light-ring' ? a.dOut : a.d),
-    );
-    for (const ring of outerFirst) {
-      if (ring.edge === 'light-ring') {
-        fill(ring.dOut, 0);
-        fill(ring.dIn, 255);
-      } else fill(ring.d, ring.edge === 'dark-disc' ? 255 : 0);
-    }
-  }
-  return mask;
-}
-
-interface Candidate extends Point {
-  score: number;
-}
-
-function collectHoles(
-  cv: Cv,
-  bin: Mat,
-  gray: Mat,
-  radius: number,
-  found: Candidate[],
-  scope: Scope,
-): void {
-  const expected = Math.PI * radius * radius;
-  const { contours, outer } = components(cv, bin, scope);
-  for (const i of outer) {
-    const contour = scope.own(contours.get(i));
-    const area = cv.contourArea(contour);
-    const ratio = area / expected;
-    if (ratio < 0.5 || ratio > MAX_MERGED * 1.5) continue;
-    if (touchesBorder(cv, contour, gray)) continue;
-    const hull = scope.own(new cv.Mat());
-    cv.convexHull(contour, hull, false, true);
-    const solidity = area / cv.contourArea(hull);
-    const perimeter = cv.arcLength(contour, true);
-    const roundness = (4 * Math.PI * area) / (perimeter * perimeter);
-    const merged = ratio > 1.5 ? Math.round(ratio) : 1;
-    if (merged === 1 ? roundness < 0.55 : solidity < 0.75) continue;
-    const m = cv.moments(contour, false);
-    const centre = { x: m.m10 / m.m00, y: m.m01 / m.m00 };
-    if (merged === 1) {
-      found.push({ ...centre, score: roundness * (1 - Math.abs(ratio - 1) * 0.5) });
-      continue;
-    }
-    // Merged holes are spread along the long side of the blob, for a person to correct.
-    const box = cv.minAreaRect(contour);
-    const long = Math.max(box.size.width, box.size.height);
-    const angle =
-      (box.angle * Math.PI) / 180 + (box.size.width >= box.size.height ? 0 : Math.PI / 2);
-    const reach = Math.max(0, long - radius * 2);
-    for (let k = 0; k < merged; k++) {
-      const along = reach * (k / (merged - 1) - 0.5);
-      found.push({
-        x: centre.x + Math.cos(angle) * along,
-        y: centre.y + Math.sin(angle) * along,
-        score: solidity * 0.7,
-      });
-    }
-  }
-}
-
-/** Zones of solid black, by their outline, so that a hole biting into the edge stays inside. */
-function blackFields(cv: Cv, gray: Mat, radius: number, scope: Scope): Mat {
-  const mask = scope.own(cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1));
-  const { contours, outer } = darkComponents(cv, gray, scope);
-  const hulls = scope.own(new cv.MatVector());
-  for (const i of outer) {
-    const contour = scope.own(contours.get(i));
-    if (cv.contourArea(contour) < Math.PI * radius * radius * 8) continue;
-    // The table around the sheet is dark as well, but it is not a printed field.
-    if (touchesBorder(cv, contour, gray)) continue;
-    const quad = quadOf(cv, contour, 0.04, scope);
-    const corners = quad?.points.flatMap((p) => [Math.round(p.x), Math.round(p.y)]);
-    const hull = scope.own(corners ? cv.matFromArray(4, 1, cv.CV_32SC2, corners) : new cv.Mat());
-    if (!corners) cv.convexHull(contour, hull, false, true);
-    hulls.push_back(hull);
-  }
-  const white = new cv.Scalar(255);
-  for (let i = 0; i < hulls.size(); i++) cv.drawContours(mask, hulls, i, white, cv.FILLED);
-  return mask;
-}
-
-interface Printed extends Point {
-  half: number;
-}
-
-/**
- * Candidates in pixels of `gray`, best first; `printed` zones cannot hold dark holes. With
- * `fields` known exactly, a hole is dark outside them and light inside, and nothing else counts.
- */
-function findHoles(
-  cv: Cv,
-  gray: Mat,
-  radius: number,
-  printed: readonly Printed[],
-  fields: Mat | null,
-  scope: Scope,
-): Candidate[] {
-  const light = scope.own(new cv.Mat());
-  cv.blur(gray, light, new cv.Size(odd(radius * 10), odd(radius * 10)));
-  const even = scope.own(new cv.Mat());
-  cv.divide(gray, light, even, 180);
-
-  const block = odd(radius * 6);
-  const size = odd(radius * 0.5);
-  const kernel = scope.own(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(size, size)));
-
-  const dark = scope.own(new cv.Mat());
-  cv.adaptiveThreshold(even, dark, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, block, 18);
-  const black = new cv.Scalar(0);
-  for (const { x, y, half } of printed) {
-    cv.rectangle(
-      dark,
-      new cv.Point(x - half, y - half),
-      new cv.Point(x + half, y + half),
-      black,
-      cv.FILLED,
-    );
-  }
-
-  const bright = scope.own(new cv.Mat());
-  cv.adaptiveThreshold(even, bright, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, block, -18);
-  cv.bitwise_and(bright, fields ?? blackFields(cv, gray, radius, scope), bright);
-  if (fields) {
-    const outside = scope.own(new cv.Mat());
-    cv.bitwise_not(fields, outside);
-    cv.bitwise_and(dark, outside, dark);
-  }
-
-  // One mask for both: a hole on the edge of a black field is half dark and half light.
-  const holes = scope.own(new cv.Mat());
-  cv.bitwise_or(dark, bright, holes);
-  // The two halves meet along the printed edge with a seam a few pixels wide.
-  const seam = scope.own(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(7, 7)));
-  cv.morphologyEx(holes, holes, cv.MORPH_CLOSE, seam);
-  cv.morphologyEx(holes, holes, cv.MORPH_OPEN, kernel);
-  const found: Candidate[] = [];
-  collectHoles(cv, holes, gray, radius, found, scope);
-
-  const best = [...found].sort((a, b) => b.score - a.score);
-  return best.filter(
-    (hole, i) => !best.slice(0, i).some((other) => distance(hole, other) < radius * 0.7),
-  );
 }
 
 function rankHoles(holes: readonly Point[], shots: number | null): DetectedHole[] {
@@ -1352,14 +1261,14 @@ function qualityOf(
 
 function measureOnImage(
   cv: Cv,
-  gray: Mat,
+  rgba: Mat,
   plane: Plane,
   request: MeasureRequest,
   scope: Scope,
 ): MeasureResult {
   const { scale } = plane;
   const radius = ((request.holeMm / 2) * distance(scale.p1, scale.p2)) / scale.mm;
-  const holes = rankHoles(findHoles(cv, gray, radius, [], null, scope), request.shots);
+  const holes = rankHoles(findHoles(cv, rgba, radius, [], scope), request.shots);
   const n = request.template?.targets[0]?.n ?? 1;
   return {
     plane: { scale },
@@ -1432,8 +1341,11 @@ function measureOnPlane(
       y > SHEET_INSET &&
       x < bounds.w - SHEET_INSET &&
       y < bounds.h - SHEET_INSET);
-  const fields = ringFields(cv, gray, located, view, scope);
-  const holesMm = findHoles(cv, gray, radius, printed, fields, scope)
+  const clean =
+    usable && request.clean
+      ? cleanOnFlat(cv, request.clean, located, usable, plane, view, scope)
+      : null;
+  const holesMm = findHoles(cv, flat, radius, clean ? [] : printed, scope, clean)
     .map((hole) => ({ x: hole.x / view.k + view.x0, y: hole.y / view.k + view.y0 }))
     .filter(onSheet);
   const places: { n: number; aim: Point | null }[] = usable ? located : [{ n: 1, aim: null }];
@@ -1465,6 +1377,76 @@ function measureOnPlane(
   };
 }
 
+/** Where a point of the template is on this plane, by the targets found on it. */
+function templateToPlane(
+  cv: Cv,
+  located: readonly Located[],
+  layout: Layout,
+  plane: Pick<Plane, 'turns'>,
+  scope: Scope,
+): ((p: Point) => Point) | null {
+  const pairs = located.flatMap(({ n, centre }) => {
+    const target = layout.targets.find((t) => t.n === n);
+    return target ? [{ from: { x: target.x, y: target.y }, to: centre }] : [];
+  });
+  if (pairs.length >= 4) {
+    const matrix = fitHomography(
+      cv,
+      pairs.map((pair) => pair.from),
+      pairs.map((pair) => pair.to),
+      scope,
+    );
+    return matrix && ((p) => applyHomography(matrix, p));
+  }
+  if (pairs.length >= 2) {
+    const [a, b] = [pairs[0], pairs[pairs.length - 1]];
+    const [fx, fy] = [b.from.x - a.from.x, b.from.y - a.from.y];
+    const [tx, ty] = [b.to.x - a.to.x, b.to.y - a.to.y];
+    const length = fx * fx + fy * fy;
+    const cosine = (fx * tx + fy * ty) / length;
+    const sine = (fx * ty - fy * tx) / length;
+    return ({ x, y }) => {
+      const [dx, dy] = [x - a.from.x, y - a.from.y];
+      return { x: a.to.x + cosine * dx - sine * dy, y: a.to.y + sine * dx + cosine * dy };
+    };
+  }
+  // One target says nothing about a turn, so it only works if there can be none.
+  const [only] = pairs;
+  if (!only || plane.turns.length > 1) return null;
+  return ({ x, y }) => ({ x: x + only.to.x - only.from.x, y: y + only.to.y - only.from.y });
+}
+
+/** The template's clean sheet, moved to where the sheet lies on this rectified picture. */
+function cleanOnFlat(
+  cv: Cv,
+  clean: CleanSheet,
+  located: readonly Located[],
+  layout: Layout,
+  plane: Plane,
+  view: PlaneView,
+  scope: Scope,
+): CleanPicture | null {
+  const toPlane = templateToPlane(cv, located, layout, plane, scope);
+  if (!toPlane) return null;
+  const { width, height } = clean.image;
+  const from = rectangle(width, height);
+  const to = from.map((p) => {
+    const mm = toPlane({ x: p.x / clean.k + clean.x0, y: p.y / clean.k + clean.y0 });
+    return { x: (mm.x - view.x0) * view.k, y: (mm.y - view.y0) * view.k };
+  });
+  const matrix = homography(from, to);
+  if (!matrix) return null;
+  const source = scope.own(cv.matFromImageData(clean.image as ImageData));
+  const transform = scope.own(cv.matFromArray(3, 3, cv.CV_64F, [...matrix]));
+  const size = new cv.Size(view.width, view.height);
+  const moved = scope.own(new cv.Mat());
+  cv.warpPerspective(source, moved, transform, size, cv.INTER_LINEAR, cv.BORDER_REPLICATE);
+  const whole = scope.own(new cv.Mat(height, width, cv.CV_8UC1, new cv.Scalar(255)));
+  const covers = scope.own(new cv.Mat());
+  cv.warpPerspective(whole, covers, transform, size, cv.INTER_NEAREST, cv.BORDER_CONSTANT);
+  return { picture: moved, covers };
+}
+
 function manualPlane(manual: NonNullable<MeasureRequest['manual']>): Plane {
   return {
     ...manual,
@@ -1479,7 +1461,7 @@ function detectMeasure(cv: Cv, rgba: Mat, request: MeasureRequest, scope: Scope)
   if (!plane) return { plane: null, flat: null, targets: null, quality: null, elements: [] };
   return plane.homography
     ? measureOnPlane(cv, rgba, plane, request, scope)
-    : measureOnImage(cv, gray, plane, request, scope);
+    : measureOnImage(cv, rgba, plane, request, scope);
 }
 
 /** What a measured set of edges is, or null if the rings are drawn as thin lines. */

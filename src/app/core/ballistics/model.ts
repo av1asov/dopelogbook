@@ -142,7 +142,7 @@ export interface PhotoHole extends Point {
 }
 
 /** Where the scale came from, most reliable first. */
-export type ScaleSource = 'sheet' | 'element' | 'card' | 'manual';
+export type ScaleSource = 'sheet' | 'targets' | 'element' | 'card' | 'manual';
 
 export interface PhotoScale {
   source: ScaleSource;
@@ -204,6 +204,14 @@ export interface TemplateTarget {
   aim?: { up: number; right: number } | null;
 }
 
+/** A photo of the rectified sheet: a millimetre (x, y) is at pixel ((x − x0)·k, (y − y0)·k). */
+export interface CleanRef {
+  photoId: string;
+  x0: number;
+  y0: number;
+  k: number;
+}
+
 export interface TargetTemplate extends Doc {
   name: string;
   /** Used for perspective only: the drawing can lie anywhere on it, and turned. */
@@ -213,6 +221,8 @@ export interface TargetTemplate extends Doc {
   targets: TemplateTarget[];
   /** Numbers follow the print rather than the order of the targets on the photo. */
   numbering?: 'printed';
+  /** The rectified shot of the sheet before any shots, to compare new shots with. */
+  cleanRef?: CleanRef;
   /** How the sizes were measured, when that was done on screen 16b. */
   scale?: { source: ScaleSource };
 }

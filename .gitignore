@@ -2,6 +2,7 @@
 
 # Personal diary exports: the repository is public, never commit these
 dope-diary-*.json
+test-private/
 
 # Local project notes
 /docs/

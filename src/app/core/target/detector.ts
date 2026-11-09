@@ -40,7 +40,11 @@ export class TargetDetector {
     const id = ++this.lastId;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.start().postMessage({ id, request }, [request.image.data.buffer]);
+      const clean = request.kind === 'measure' ? request.clean : null;
+      this.start().postMessage({ id, request }, [
+        request.image.data.buffer,
+        ...(clean ? [clean.image.data.buffer] : []),
+      ]);
     });
   }
 

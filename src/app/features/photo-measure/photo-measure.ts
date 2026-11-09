@@ -13,6 +13,7 @@ import {
 import {
   ammoById,
   ammoName,
+  CleanRef,
   Diary,
   fmt,
   fmtAng,
@@ -37,7 +38,7 @@ import {
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
 import { shrinkPhoto, turnedPhoto } from '../../core/image';
-import { FlatImage, MeasureResult } from '../../core/target/detect';
+import { CleanSheet, FlatImage, MeasureResult } from '../../core/target/detect';
 import { flatUrl, readPixels, TargetDetector } from '../../core/target/detector';
 import {
   applyHomography,
@@ -60,7 +61,6 @@ import {
   offsetShort,
   SeriesOption,
   SeriesResult,
-  toMillimetres,
   turnPlane,
   turnPoint,
 } from '../../core/target/measure';
@@ -146,6 +146,7 @@ const SOURCE_TEXT: Record<PhotoScale['source'], string> = {
   sheet: 'Лист найден и выпрямлен',
   element: 'Выпрямлено по опорному элементу',
   card: 'Выпрямлено по карте',
+  targets: 'Выпрямлено по мишеням',
   manual: '',
 };
 
@@ -1026,6 +1027,11 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     });
   }
 
+  private async cleanSheet({ photoId, x0, y0, k }: CleanRef): Promise<CleanSheet | null> {
+    const blob = await this.store.getPhoto(photoId);
+    return blob ? { image: await readPixels(blob), x0, y0, k } : null;
+  }
+
   /** With no template only the holes are searched for, on the plane already set. */
   private async detect(template: TargetTemplate | null, mayGuess: boolean): Promise<void> {
     const marks = this.scaleLocked() ? this.marks() : null;
@@ -1036,9 +1042,11 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     this.notice.set(null);
     try {
       const image = await readPixels(this.blob);
+      const clean = template?.cleanRef ? await this.cleanSheet(template.cleanRef) : null;
       const result = await this.detector.measure({
         kind: 'measure',
         image,
+        clean,
         template: template && {
           sheet: template.sheet,
           targets: template.targets,

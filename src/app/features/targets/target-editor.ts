@@ -14,6 +14,7 @@ import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { map } from 'rxjs';
 import {
+  CleanRef,
   numText,
   parseNum,
   Point,
@@ -212,6 +213,8 @@ export class TargetEditor implements OnInit, OnDestroy {
   protected readonly manualOpen = signal(false);
   protected readonly manualMarks = signal<ManualMarks | null>(null);
   private readonly scaleSource = signal<ScaleSource | undefined>(undefined);
+  /** A segment corrected the millimetres, so they no longer match the rectified picture. */
+  private readonly manualScaled = signal(false);
   protected readonly foundPlane = computed(() => this.survey()?.plane ?? null);
   protected readonly placeCount = computed(() => this.places().length);
   protected readonly manualElement = computed((): ManualElement =>
@@ -542,6 +545,7 @@ export class TargetEditor implements OnInit, OnDestroy {
     this.error.set(null);
     this.surveyFailed.set(false);
     this.manualMarks.set(null);
+    this.manualScaled.set(false);
     this.scaleSource.set(undefined);
     try {
       const result = await this.detector.survey({
@@ -611,6 +615,7 @@ export class TargetEditor implements OnInit, OnDestroy {
         aimRight: numText(layout.aim?.right ?? 0),
       });
     }
+    this.manualScaled.set(scaled);
     if (scaled) this.scaleSource.set('manual');
     else if (plane) this.scaleSource.set('sheet');
   }
@@ -639,6 +644,7 @@ export class TargetEditor implements OnInit, OnDestroy {
     }
     const existing = this.existing();
     const artSize = this.artSize();
+    const cleanRef = await this.cleanRef(existing?.cleanRef);
     const template = await this.store.save('target', {
       ...(existing ? { id: existing.id, createdAt: existing.createdAt } : {}),
       name,
@@ -646,6 +652,7 @@ export class TargetEditor implements OnInit, OnDestroy {
       ...(artSize ? { artSize } : {}),
       targets,
       ...(this.order() === 'printed' ? { numbering: 'printed' as const } : {}),
+      ...(cleanRef ? { cleanRef } : {}),
       ...(this.scaleSource() ? { scale: { source: this.scaleSource() as ScaleSource } } : {}),
     });
     if (this.overlay()) {
@@ -654,9 +661,27 @@ export class TargetEditor implements OnInit, OnDestroy {
     } else await this.router.navigate(['/more/targets']);
   }
 
+  /**
+   * New shots are compared with this picture, so it has to be of a blank sheet, and its
+   * millimetres have to be those of the layout. A shot from the marking screen has holes in it.
+   */
+  private async cleanRef(old: CleanRef | undefined): Promise<CleanRef | undefined> {
+    if (!this.blob() || this.manualScaled()) return old;
+    const flat = this.flat();
+    const url = this.flatSrc();
+    const blank = this.source !== this.photo();
+    const onSheet = !!this.survey()?.plane?.scale.sheet;
+    if (old) await this.store.removePhoto(old.photoId);
+    if (!flat || !url || !blank || !onSheet) return undefined;
+    const picture = await (await fetch(url)).blob();
+    const { x0, y0, k } = flat;
+    return { photoId: await this.store.addPhoto(picture), x0, y0, k };
+  }
+
   protected async remove(): Promise<void> {
     const existing = this.existing();
     if (!existing || this.photoCount()) return;
+    if (existing.cleanRef) await this.store.removePhoto(existing.cleanRef.photoId);
     await this.store.remove('target', existing.id);
     await this.router.navigate(['/more/targets']);
   }
