@@ -1,9 +1,19 @@
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { Ammo, ammoById, ammoName, POSITIONS, RESTS, Rifle } from '../../core/ballistics';
+import {
+  Ammo,
+  ammoById,
+  ammoName,
+  mountsOf,
+  POSITIONS,
+  RESTS,
+  Rifle,
+  zeroInfo,
+} from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 
 export type PickerForm = FormGroup<{
+  scopeId: FormControl<string>;
   ammoId: FormControl<string>;
   device: FormControl<string>;
   pos: FormControl<string>;
@@ -24,6 +34,8 @@ export class SeriesPicker {
   readonly form = input.required<PickerForm>();
   readonly rifle = input.required<Rifle>();
   readonly seriesNumber = input.required<number>();
+  /** The range screen converts the entered corrections to the new scope's units. */
+  readonly scopeSelected = output<string>();
   readonly closed = output<void>();
 
   protected readonly positions = POSITIONS;
@@ -32,6 +44,14 @@ export class SeriesPicker {
   protected ammoList(): Ammo[] {
     const diary = this.store.diary();
     return this.rifle().combos.flatMap((combo) => ammoById(diary, combo.ammoId) ?? []);
+  }
+
+  protected scopes(): { id: string; label: string }[] {
+    const diary = this.store.diary();
+    return mountsOf(diary, this.rifle()).map(({ scope }) => {
+      const zero = zeroInfo(diary, this.rifle().id, scope.id);
+      return { id: scope.id, label: zero ? `${scope.name} · ноль ${zero.dist}` : scope.name };
+    });
   }
 
   protected name(ammo: Ammo): string {

@@ -1,12 +1,13 @@
-import { Ammo, ColdShot, PhotoRef, Rifle, Series, Session } from '../ballistics/model';
+import { Ammo, ColdShot, PhotoRef } from '../ballistics/model';
+import { RifleV2, SeriesV2, SessionV2 } from './scope-migration';
 
 /* Documents from older versions have no fixed shape, so they are read untyped. */
 type Raw = any;
 
 export interface LegacyResult {
-  rifles: Rifle[];
+  rifles: RifleV2[];
   ammo: Ammo[];
-  sessions: Session[];
+  sessions: SessionV2[];
   /** Sessions had more than one cold series; the extra ones are excluded from the card. */
   extraColdSeries: number;
 }
@@ -24,7 +25,12 @@ const COLD_REASON = 'холодный ствол, учитывается отд�
 function migrateRifle(
   id: string,
   r: Raw,
-): { combos: Rifle['combos']; ammo: Ammo[]; loadMap?: Record<string, string>; firstLoad?: string } {
+): {
+  combos: RifleV2['combos'];
+  ammo: Ammo[];
+  loadMap?: Record<string, string>;
+  firstLoad?: string;
+} {
   if (Array.isArray(r.combos)) {
     return {
       combos: r.combos.map((c: Raw) => ({ ammoId: c.ammoId, velocity: c.velocity })),
@@ -94,7 +100,7 @@ function extraRounds(s: Raw, series: Raw[]): number {
   return Math.max(0, recorded - series.reduce((sum, x) => sum + (x.shots || 0), 0));
 }
 
-function toSeries(x: Raw): Series {
+function toSeries(x: Raw): SeriesV2 {
   const skip = x.skip || (x.skip === undefined && x.ok === false);
   return compact({
     ammoId: x.ammoId ?? '',
@@ -166,7 +172,7 @@ function toSession(id: string, s: Raw, rifleMaps: Map<string, ReturnType<typeof 
     s.rezero && typeof s.rezero === 'object'
       ? compact({ dist: s.rezero.dist, ammoId: s.rezero.ammoId || legacyAmmo })
       : undefined;
-  const session: Session = compact({
+  const session: SessionV2 = compact({
     id,
     createdAt,
     updatedAt: createdAt,
@@ -190,7 +196,7 @@ function toSession(id: string, s: Raw, rifleMaps: Map<string, ReturnType<typeof 
 export function convertLegacyDocs(docs: Record<string, Raw>): LegacyResult {
   const entries = Object.entries(docs);
   const rifleMaps = new Map<string, ReturnType<typeof migrateRifle>>();
-  const rifles: Rifle[] = [];
+  const rifles: RifleV2[] = [];
   const ammo: Ammo[] = [];
 
   for (const [id, r] of entries) {
@@ -244,7 +250,7 @@ export function convertLegacyDocs(docs: Record<string, Raw>): LegacyResult {
     );
   }
 
-  const sessions: Session[] = [];
+  const sessions: SessionV2[] = [];
   let extraColdSeries = 0;
   for (const [id, s] of entries) {
     if (s.kind !== 'session') continue;

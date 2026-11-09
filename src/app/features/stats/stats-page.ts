@@ -6,6 +6,7 @@ import {
   ammoName,
   barrelLife,
   cardAmmoId,
+  cardScopeId,
   coldStats,
   combosOf,
   correctionStability,
@@ -14,14 +15,20 @@ import {
   fmtSigned,
   GroupEntry,
   groupsOf,
-  MOA_PER_MIL,
+  mainScope,
+  MOA_PER_MRAD,
+  mountsOf,
   niceTicks,
   plural,
   rdate,
-  Rifle,
+  ScopeUnits,
   stanceName,
   stanceStats,
   toUnits,
+  unitDigits,
+  unitLabel,
+  unitsOf,
+  ZERO_TOLERANCE,
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
@@ -74,7 +81,7 @@ export class StatsPage {
   protected readonly unit = computed(() => this.settings.groupUnit());
   private readonly inUnit = computed(() => {
     const moa = this.unit() === 'MOA';
-    return (mrad: number) => (moa ? mrad * MOA_PER_MIL : mrad);
+    return (mrad: number) => (moa ? mrad * MOA_PER_MRAD : mrad);
   });
 
   protected isOpen(key: string): boolean {
@@ -90,13 +97,17 @@ export class StatsPage {
   }
 
   protected toggleUnit(): void {
-    void this.settings.setGroupUnit(this.unit() === 'MOA' ? 'MIL' : 'MOA');
+    void this.settings.setGroupUnit(this.unit() === 'MOA' ? 'MRAD' : 'MOA');
   }
+
+  protected readonly scopeChips = computed(() =>
+    mountsOf(this.store.diary(), this.view.rifle()).map(({ scope }) => scope),
+  );
 
   protected readonly progress = computed(() => {
     const rifle = this.view.rifle();
     if (!rifle) return null;
-    const groups = groupsOf(this.store.diary(), rifle.id);
+    const groups = groupsOf(this.store.diary(), rifle.id, null, this.view.statsScopeId());
     const label = (g: GroupEntry) => stanceName(g.series) || 'не указано';
     const counts = new Map<string, number>();
     for (const g of groups) counts.set(label(g), (counts.get(label(g)) ?? 0) + 1);
@@ -143,7 +154,7 @@ export class StatsPage {
     const rifle = this.view.rifle();
     if (!rifle) return null;
     const inUnit = this.inUnit();
-    const rows = ammoComparison(this.store.diary(), rifle).map((row) => ({
+    const rows = ammoComparison(this.store.diary(), rifle, this.view.statsScopeId()).map((row) => ({
       name: ammoName(row.ammo),
       values: row.values.map(inUnit),
       avg: inUnit(row.avg),
@@ -200,7 +211,7 @@ export class StatsPage {
     const rifle = this.view.rifle();
     if (!rifle) return [];
     const inUnit = this.inUnit();
-    const rows = stanceStats(this.store.diary(), rifle.id);
+    const rows = stanceStats(this.store.diary(), rifle.id, this.view.statsScopeId());
     const max = Math.max(...rows.map((row) => row.avg));
     return rows.map((row) => ({
       key: `${row.pos}|${row.rest}`,
@@ -225,48 +236,67 @@ export class StatsPage {
     }));
   });
 
+  /** Stability compares with a card, and a card belongs to one scope. */
+  private readonly stabilityScope = computed(() => {
+    const rifle = this.view.rifle();
+    return rifle ? cardScopeId(this.store.diary(), rifle, this.view.statsScopeId()) : null;
+  });
+
   protected readonly stabilityAmmo = computed(() => {
     const rifle = this.view.rifle();
-    return rifle ? cardAmmoId(this.store.diary(), rifle, this.view.ammoId()) : null;
+    const scopeId = this.stabilityScope();
+    return rifle && scopeId
+      ? cardAmmoId(this.store.diary(), rifle, scopeId, this.view.ammoId())
+      : null;
   });
 
   protected readonly stability = computed(() => {
     const rifle = this.view.rifle();
     const ammoId = this.stabilityAmmo();
-    if (!rifle || !ammoId) return null;
+    const scopeId = this.stabilityScope();
+    if (!rifle || !ammoId || !scopeId) return null;
     const diary = this.store.diary();
-    const units = rifle.units;
-    const tolerance = fmt(units === 'MOA' ? 0.7 : 0.2, 1);
-    const entries = correctionStability(diary, rifle.id, ammoId, units);
+    const scope = this.scopeChips().find((s) => s.id === scopeId);
+    const units = unitsOf(scope);
+    const label = unitLabel(units);
+    const tolerance = fmt(toUnits(ZERO_TOLERANCE, units), Math.max(1, unitDigits(scope)));
+    const entries = correctionStability(diary, rifle.id, scopeId, ammoId);
     const off = entries.filter((p) => p.deviation != null).length;
     const points: ChartPoint[] = entries.map((p) => ({
       x: p.dist,
-      y: p.value,
+      y: toUnits(p.value, units),
       cls: p.deviation != null ? 'c2' : 'c1',
-      tip: this.stabilityTip(rifle, p),
+      tip: this.stabilityTip(units, p),
     }));
-    const line = dopePoints(diary, rifle.id, ammoId).elev.map((p) => ({ x: p.d, y: p.v }));
+    const line = dopePoints(diary, rifle.id, scopeId, ammoId).elev.map((p) => ({
+      x: p.d,
+      y: toUnits(p.v, units),
+    }));
     return {
       points,
       line,
       enough: new Set(entries.map((p) => p.dist)).size >= 2,
-      tolerance: `${tolerance} ${units}`,
-      units,
+      tolerance: `${tolerance} ${label}`,
+      units: label,
       off,
       summary: !entries.length
         ? 'Пока нет серий после пристрелки'
         : off
           ? `${off} ${plural(off, 'серия отличается', 'серии отличаются', 'серий отличаются')} от карты на ${tolerance}+`
-          : `Все серии в пределах ${tolerance} ${units} от карты`,
+          : `Все серии в пределах ${tolerance} ${label} от карты`,
     };
   });
 
-  private stabilityTip(rifle: Rifle, p: ReturnType<typeof correctionStability>[number]): string {
-    const parts = [rdate(p.session.date), `${p.dist} м`, `${fmt(p.value, 1)} ${rifle.units}`];
+  private stabilityTip(
+    units: ScopeUnits,
+    p: ReturnType<typeof correctionStability>[number],
+  ): string {
+    const value = fmt(toUnits(p.value, units), 1);
+    const parts = [rdate(p.session.date), `${p.dist} м`, `${value} ${unitLabel(units)}`];
     if (p.session.temp != null) parts.push(`${fmt(p.session.temp, 0)} °C`);
     const stance = stanceName(p.series);
     if (stance) parts.push(stance);
-    if (p.deviation != null) parts.push(`от карты ${fmtSigned(p.deviation)}`);
+    if (p.deviation != null) parts.push(`от карты ${fmtSigned(toUnits(p.deviation, units))}`);
     return parts.join(' · ');
   }
 
@@ -280,8 +310,9 @@ export class StatsPage {
       date: p.session.date,
     }));
     const cold = coldStats(diary, rifle.id);
+    const units = unitsOf(mainScope(diary, rifle));
     const coldOffset = cold
-      ? `${arrows(toUnits(cold.up, rifle.units), toUnits(cold.right, rifle.units), 2)} ${rifle.units}`
+      ? `${arrows(toUnits(cold.up, units), toUnits(cold.right, units), 2)} ${unitLabel(units)}`
       : '';
     return {
       total: line.at(-1)?.y ?? 0,

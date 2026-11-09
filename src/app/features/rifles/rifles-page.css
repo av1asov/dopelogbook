@@ -21,6 +21,11 @@
   font-size: 14px;
 }
 
+.scopes {
+  display: flex;
+  flex-direction: column;
+}
+
 .combos {
   display: flex;
   flex-direction: column;

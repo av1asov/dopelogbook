@@ -1,0 +1,134 @@
+<header class="edit-header">
+  <a [routerLink]="returnLink()">Отмена</a>
+  <b>Прицел</b>
+  <button type="submit" form="scope-form">Готово</button>
+</header>
+
+<form id="scope-form" class="screen" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
+
+  <div class="field">
+    Тип
+    <span class="seg">
+      @for (item of types; track item[0]) {
+        <button
+          type="button"
+          [attr.aria-pressed]="form.controls.type.value === item[0]"
+          (click)="form.controls.type.setValue(item[0])"
+        >
+          {{ item[1] }}
+        </button>
+      }
+    </span>
+  </div>
+
+  <label class="field">Название<input formControlName="name" /></label>
+
+  <div class="field">
+    Единицы поправок
+    <span class="seg units">
+      @for (item of unitOptions; track item[0]) {
+        <button
+          type="button"
+          [attr.aria-pressed]="form.controls.units.value === item[0]"
+          (click)="selectUnits(item[0])"
+        >
+          {{ item[1] }}
+        </button>
+      }
+    </span>
+    <span class="hint plain">
+      MRAD и MIL — одно и то же, выберите, как написано на прицеле. У многих тепловизоров поправка в
+      сантиметрах на 100 м: 1 см/100 м = 0,1 MRAD.
+    </span>
+  </div>
+
+  <div class="form-grid">
+    <label class="field">
+      Цена щелчка, {{ clickLabel() }}
+      <input class="num" inputmode="decimal" formControlName="click" />
+    </label>
+    <label class="field">
+      Кратность
+      <input formControlName="magnification" placeholder="2,5–10×" />
+    </label>
+  </div>
+
+  <section class="section" formArrayName="mounts">
+    <h2 class="section-title">На винтовках</h2>
+    <div class="list">
+      @for (mount of form.controls.mounts.controls; track mount; let i = $index) {
+        <div class="row" [formGroupName]="i">
+          <span class="grow">
+            <b>{{ rifleName(mount.controls.rifleId.value) }}</b>
+            <span class="status">{{ mountStatus(mount) }}</span>
+          </span>
+          <span class="height-label">выс.</span>
+          <input
+            class="input num height"
+            formControlName="sightHeight"
+            inputmode="decimal"
+            placeholder="мм"
+            [attr.aria-label]="'Высота над осью ствола: ' + rifleName(mount.controls.rifleId.value)"
+          />
+          <button
+            type="button"
+            class="toggle"
+            [class.install]="!mount.controls.mounted.value"
+            (click)="toggleMounted(mount)"
+          >
+            {{ mount.controls.mounted.value ? 'Снять' : 'Установить' }}
+          </button>
+          @if (!rifleSeries(mount.controls.rifleId.value)) {
+            <button
+              type="button"
+              class="remove"
+              [attr.aria-label]="'Убрать с винтовки ' + rifleName(mount.controls.rifleId.value)"
+              (click)="removeMount(i)"
+            >
+              ✕
+            </button>
+          }
+        </div>
+      }
+      @if (freeRifles().length) {
+        <button type="button" class="link-btn bind" (click)="pickingRifle.set(!pickingRifle())">
+          + На другую винтовку
+        </button>
+      }
+      @if (pickingRifle()) {
+        <div class="picker">
+          @for (rifle of freeRifles(); track rifle.id) {
+            <button type="button" class="chip" (click)="addRifle(rifle)">{{ rifle.name }}</button>
+          }
+        </div>
+      }
+    </div>
+    <span class="hint">
+      Установка снимает с винтовки прежний прицел. Высоту над осью ствола задаёт крепление, поэтому
+      она своя для каждой винтовки.
+    </span>
+  </section>
+
+  <label class="field">Заметки<textarea formControlName="notes"></textarea></label>
+
+  @if (id()) {
+    @if (seriesCount()) {
+      <span class="hint">Удалить нельзя: по прицелу есть серии ({{ seriesCount() }}).</span>
+    } @else if (confirmingDelete()) {
+      <div class="notice confirm">
+        <span>Удалить прицел?</span>
+        <div class="btn-row">
+          <button type="button" class="btn danger" (click)="remove()">Удалить</button>
+          <button type="button" class="btn" (click)="confirmingDelete.set(false)">Отмена</button>
+        </div>
+      </div>
+    } @else {
+      <button type="button" class="link-btn danger" (click)="confirmingDelete.set(true)">
+        Удалить прицел
+      </button>
+    }
+  }
+</form>

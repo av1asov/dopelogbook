@@ -1,9 +1,10 @@
-import { Ammo, Doc, Rifle, Session } from '../ballistics/model';
+import { Ammo, Doc, Rifle, Scope, Session } from '../ballistics/model';
 import { Snapshot, StoredPhoto } from './db';
 import { convertLegacyDocs } from './legacy';
+import { migrateToScopes, RifleV2, SessionV2 } from './scope-migration';
 
 const FORMAT = 'dope-diary';
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 export class BackupError extends Error {}
 
@@ -67,7 +68,7 @@ function parsePhotoV1(id: string, dataUrl: unknown, stamp: string): StoredPhoto 
   }
 }
 
-function dropMissingPhotos(sessions: Session[], photos: StoredPhoto[]): number {
+function dropMissingPhotos(sessions: Pick<Session, 'photos'>[], photos: StoredPhoto[]): number {
   const known = new Set(photos.map((p) => p.id));
   let missing = 0;
   for (const session of sessions) {
@@ -86,26 +87,39 @@ function parseV1(file: Record<string, unknown>): ParsedBackup {
   const photos = Object.entries((file['photos'] ?? {}) as Record<string, unknown>).flatMap(
     ([id, dataUrl]) => parsePhotoV1(id, dataUrl, stamp) ?? [],
   );
+  const missingPhotos = dropMissingPhotos(legacy.sessions, photos);
   return {
-    snapshot: { rifles: legacy.rifles, ammo: legacy.ammo, sessions: legacy.sessions, photos },
-    warnings: {
-      extraColdSeries: legacy.extraColdSeries,
-      missingPhotos: dropMissingPhotos(legacy.sessions, photos),
+    snapshot: {
+      ...migrateToScopes(legacy.rifles, legacy.sessions),
+      ammo: legacy.ammo,
+      photos,
     },
+    warnings: { extraColdSeries: legacy.extraColdSeries, missingPhotos },
   };
 }
 
-interface StoredDocV2 extends Doc {
-  kind: 'rifle' | 'ammo' | 'session';
+interface StoredDoc extends Doc {
+  kind: 'scope' | 'rifle' | 'ammo' | 'session';
 }
 
-function parseV2(file: Record<string, unknown>): ParsedBackup {
-  const snapshot: Snapshot = { rifles: [], ammo: [], sessions: [], photos: [] };
-  for (const raw of Object.values(file['docs'] as Record<string, StoredDocV2>)) {
+/** Version 2 kept the scope on the rifle; everything else reads the same as version 3. */
+function parseDocs(file: Record<string, unknown>): ParsedBackup {
+  const snapshot: Snapshot = { scopes: [], rifles: [], ammo: [], sessions: [], photos: [] };
+  for (const raw of Object.values(file['docs'] as Record<string, StoredDoc>)) {
     const { kind, ...doc } = raw;
+    if (kind === 'scope') snapshot.scopes.push(doc as unknown as Scope);
     if (kind === 'rifle') snapshot.rifles.push(doc as unknown as Rifle);
     if (kind === 'ammo') snapshot.ammo.push(doc as unknown as Ammo);
     if (kind === 'session') snapshot.sessions.push(doc as unknown as Session);
+  }
+  if (file['version'] === 2) {
+    Object.assign(
+      snapshot,
+      migrateToScopes(
+        snapshot.rifles as unknown as RifleV2[],
+        snapshot.sessions as unknown as SessionV2[],
+      ),
+    );
   }
   const photos = (file['photos'] ?? {}) as Record<string, Omit<Doc, 'id'> & { data: string }>;
   let damaged = 0;
@@ -136,13 +150,14 @@ export function parseBackup(text: string): ParsedBackup {
     throw new BackupError('Это не резервная копия дневника.');
   }
   if (file['version'] === 1) return parseV1(file);
-  if (file['version'] === CURRENT_VERSION) return parseV2(file);
+  if (file['version'] === 2 || file['version'] === CURRENT_VERSION) return parseDocs(file);
   throw new BackupError(`Неизвестная версия файла: ${String(file['version'])}.`);
 }
 
 /** Built from parts: joining every photo into one string can exhaust memory on a phone. */
 export async function buildBackup(snapshot: Snapshot, exportedAt: string): Promise<Blob> {
   const docs: Record<string, object> = {};
+  for (const c of snapshot.scopes) docs[c.id] = { ...c, kind: 'scope' };
   for (const r of snapshot.rifles) docs[r.id] = { ...r, kind: 'rifle' };
   for (const a of snapshot.ammo) docs[a.id] = { ...a, kind: 'ammo' };
   for (const s of snapshot.sessions) docs[s.id] = { ...s, kind: 'session' };

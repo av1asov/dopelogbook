@@ -2,7 +2,7 @@
 <section
   class="sheet"
   role="dialog"
-  [attr.aria-label]="'Патрон, устройство и положение для серии ' + seriesNumber()"
+  [attr.aria-label]="'Патрон, прицел, устройство и положение для серии ' + seriesNumber()"
   [formGroup]="form()"
 >
   <span class="handle"></span>
@@ -22,6 +22,21 @@
         </span>
       </label>
     }
+  </div>
+
+  <div class="group">
+    <span class="section-title">Прицел</span>
+    <div class="seg">
+      @for (scope of scopes(); track scope.id) {
+        <button
+          type="button"
+          [attr.aria-pressed]="form().controls.scopeId.value === scope.id"
+          (click)="scopeSelected.emit(scope.id)"
+        >
+          {{ scope.label }}
+        </button>
+      }
+    </div>
   </div>
 
   <div class="group">

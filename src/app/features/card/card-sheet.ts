@@ -17,6 +17,7 @@ import {
   combosOf,
   devicesUsed,
   devName,
+  mountsOf,
   numText,
   parseNum,
   restName,
@@ -56,15 +57,19 @@ export class CardSheet implements OnInit {
     });
   });
 
+  protected readonly scopes = computed(() =>
+    mountsOf(this.store.diary(), this.data().rifle).map(({ scope }) => scope),
+  );
+
   protected readonly devices = computed(() => {
-    const { rifle, ammo } = this.data();
-    const used = devicesUsed(this.store.diary(), rifle.id, ammo?.id);
+    const { rifle, ammo, scope } = this.data();
+    const used = devicesUsed(this.store.diary(), rifle.id, ammo?.id, scope?.id);
     return [...new Set(['', ...(rifle.devices ?? []), ...used])];
   });
 
   protected readonly rests = computed(() => {
-    const { rifle, ammo } = this.data();
-    return restsUsed(this.store.diary(), rifle.id, ammo?.id).map((value) => ({
+    const { rifle, ammo, scope } = this.data();
+    return restsUsed(this.store.diary(), rifle.id, ammo?.id, scope?.id).map((value) => ({
       value,
       name: restName(value) || 'не указана',
     }));
@@ -80,6 +85,11 @@ export class CardSheet implements OnInit {
 
   protected selectAmmo(id: string): void {
     this.view.ammoId.set(id);
+    this.view.updateCard({ device: '*', rest: '*' });
+  }
+
+  protected selectScope(id: string): void {
+    this.view.scopeId.set(id);
     this.view.updateCard({ device: '*', rest: '*' });
   }
 

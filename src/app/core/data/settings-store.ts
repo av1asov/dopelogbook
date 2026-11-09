@@ -1,5 +1,5 @@
 import { inject, Injectable, signal } from '@angular/core';
-import { Units } from '../ballistics/model';
+import { GroupUnit } from '../ballistics/model';
 import { DiaryRepository } from './repository';
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -8,19 +8,19 @@ export type Theme = 'system' | 'light' | 'dark';
 export class SettingsStore {
   private readonly repository = inject(DiaryRepository);
 
-  /** Unit for group sizes. Scope corrections always use the rifle's own units. */
-  readonly groupUnit = signal<Units>('MOA');
+  /** Unit for group sizes. Corrections always use the units of their scope. */
+  readonly groupUnit = signal<GroupUnit>('MOA');
   readonly theme = signal<Theme>('system');
   readonly lastBackupAt = signal<string | null>(null);
 
   async init(): Promise<void> {
     try {
       const [groupUnit, theme, lastBackupAt] = await Promise.all([
-        this.repository.getSetting<Units>('groupUnit'),
+        this.repository.getSetting<GroupUnit | 'MIL'>('groupUnit'),
         this.repository.getSetting<Theme>('theme'),
         this.repository.getSetting<string>('lastBackupAt'),
       ]);
-      if (groupUnit) this.groupUnit.set(groupUnit);
+      if (groupUnit) this.groupUnit.set(groupUnit === 'MIL' ? 'MRAD' : groupUnit);
       if (theme) this.theme.set(theme);
       if (lastBackupAt) this.lastBackupAt.set(lastBackupAt);
     } finally {
@@ -28,7 +28,7 @@ export class SettingsStore {
     }
   }
 
-  async setGroupUnit(unit: Units): Promise<void> {
+  async setGroupUnit(unit: GroupUnit): Promise<void> {
     this.groupUnit.set(unit);
     await this.repository.setSetting('groupUnit', unit);
   }

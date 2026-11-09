@@ -14,13 +14,17 @@ import {
   altitudeAt,
   ammoById,
   ammoName,
+  mainScope,
+  mountsOf,
   numText,
   parseNum,
   recentPlaces,
   Rifle,
+  scopeById,
   sessionsOf,
   todayIso,
-  zeroInfo,
+  zeroingDefaults,
+  zeroText,
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 import { compact } from '../../core/data/legacy';
@@ -45,10 +49,14 @@ export class NewSession implements OnInit {
     temp: text(),
     pressure: text(),
     altitude: text(),
-    rezero: new FormControl(false, { nonNullable: true }),
+    zeroingOn: new FormControl(false, { nonNullable: true }),
+    zeroDist: text('100'),
+    zeroAmmo: text(),
+    zeroScope: text(),
   });
 
   protected readonly busy = signal(false);
+  protected readonly editingZero = signal(false);
   private readonly rifleId = toSignal(
     this.form.controls.rifleId.valueChanges.pipe(map(() => this.form.controls.rifleId.value)),
     { initialValue: '' },
@@ -66,16 +74,48 @@ export class NewSession implements OnInit {
     const latest = sessionsOf(diary)[0];
     const rifles = this.store.rifles();
     const rifleId = rifles.some((r) => r.id === latest?.rifleId) ? latest.rifleId : rifles[0].id;
+    this.form.controls.rifleId.valueChanges.subscribe(() => this.fillZeroing());
     this.form.controls.rifleId.setValue(rifleId);
     if (latest?.place) this.choosePlace(latest.place);
   }
 
   protected zeroText(rifle: Rifle): string {
     const diary = this.store.diary();
-    const zero = zeroInfo(diary, rifle.id);
-    if (!zero) return 'ноль не отмечен';
-    if (zero.derived) return `ноль ${zero.dist} м, по журналу`;
-    return `ноль ${zero.dist} м под ${ammoName(ammoById(diary, zero.ammoId))}`;
+    const scope = mainScope(diary, rifle);
+    if (!scope) return 'прицел не добавлен';
+    return `${scope.name} · ${zeroText(diary, rifle.id, scope.id, false)}`;
+  }
+
+  protected hasScope(rifle: Rifle | undefined): boolean {
+    return mountsOf(this.store.diary(), rifle).length > 0;
+  }
+
+  protected scopeOptions(rifle: Rifle): { id: string; name: string }[] {
+    return mountsOf(this.store.diary(), rifle).map(({ scope }) => scope);
+  }
+
+  protected ammoOptions(rifle: Rifle): { id: string; name: string }[] {
+    const diary = this.store.diary();
+    return rifle.combos.map((c) => ({ id: c.ammoId, name: ammoName(ammoById(diary, c.ammoId)) }));
+  }
+
+  protected zeroAmmoName(): string {
+    return ammoName(ammoById(this.store.diary(), this.form.controls.zeroAmmo.value));
+  }
+
+  protected zeroScopeName(): string {
+    return scopeById(this.store.diary(), this.form.controls.zeroScope.value)?.name ?? '';
+  }
+
+  private fillZeroing(): void {
+    const rifle = this.rifle();
+    if (!rifle) return;
+    const plan = zeroingDefaults(this.store.diary(), rifle);
+    this.form.patchValue({
+      zeroDist: numText(plan.dist),
+      zeroAmmo: plan.ammoId,
+      zeroScope: plan.scopeId,
+    });
   }
 
   protected choosePlace(place: string): void {
@@ -90,10 +130,12 @@ export class NewSession implements OnInit {
 
   protected async start(): Promise<void> {
     const rifle = this.rifle();
-    if (!rifle || !rifle.combos.length || this.busy()) return;
+    if (!rifle || !rifle.combos.length || !this.hasScope(rifle) || this.busy()) return;
     this.busy.set(true);
     const v = this.form.getRawValue();
-    const zeroDist = zeroInfo(this.store.diary(), rifle.id)?.dist ?? 100;
+    const zeroing = v.zeroingOn
+      ? { dist: parseNum(v.zeroDist) ?? 100, ammoId: v.zeroAmmo, scopeId: v.zeroScope }
+      : null;
     try {
       await this.store.save(
         'session',
@@ -104,7 +146,7 @@ export class NewSession implements OnInit {
           temp: parseNum(v.temp),
           pressure: parseNum(v.pressure),
           altitude: parseNum(v.altitude),
-          rezero: v.rezero ? { dist: zeroDist } : null,
+          zeroing,
           open: true,
           series: [],
         }),

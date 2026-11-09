@@ -38,27 +38,42 @@
     </label>
   </div>
 
-  <section class="card">
-    <label class="check">
-      <input type="checkbox" formControlName="rezeroOn" />
-      В этот день выставил ноль
-    </label>
-    @if (form.controls.rezeroOn.value) {
-      <div class="form-grid">
+  <section class="card" formArrayName="zeroEvents">
+    <h2 class="section-title">Ноль выставлен</h2>
+    @for (event of form.controls.zeroEvents.controls; track event; let i = $index) {
+      <div class="form-grid" [formGroupName]="i">
+        <label class="field wide">
+          Когда
+          <select formControlName="afterSi">
+            @for (moment of zeroMoments(); track moment.value) {
+              <option [value]="moment.value">{{ moment.label }}</option>
+            }
+          </select>
+        </label>
         <label class="field">
           Дистанция, м
-          <input class="num" inputmode="numeric" formControlName="rezeroDist" />
+          <input class="num" inputmode="numeric" formControlName="dist" />
         </label>
         <label class="field">
           Под патрон
-          <select formControlName="rezeroAmmo">
-            @for (ammo of ammoOptions(form.controls.rezeroAmmo.value); track ammo.id) {
+          <select formControlName="ammoId">
+            @for (ammo of ammoOptions(event.controls.ammoId.value); track ammo.id) {
               <option [value]="ammo.id">{{ ammo.name }}</option>
             }
           </select>
         </label>
+        <label class="field wide">
+          Прицел
+          <select formControlName="scopeId">
+            @for (scope of scopeOptions(event.controls.scopeId.value); track scope.id) {
+              <option [value]="scope.id">{{ scope.name }}</option>
+            }
+          </select>
+        </label>
+        <button type="button" class="link-btn" (click)="removeZeroEvent(i)">Убрать отметку</button>
       </div>
     }
+    <button type="button" class="btn" (click)="addZeroEvent()">Отметить ноль</button>
   </section>
 
   <ng-template #coldBlock>
@@ -104,12 +119,24 @@
           <b>Серия {{ i + 1 }}</b>
           <button type="button" class="link-btn" (click)="removeSeries(i)">Убрать</button>
         </div>
+        <label class="check">
+          <input type="checkbox" formControlName="zeroing" />
+          Пристрелочная — только в ресурс ствола
+        </label>
         <div class="form-grid">
           <label class="field wide">
             Патрон
             <select formControlName="ammoId">
               @for (ammo of ammoOptions(series.controls.ammoId.value); track ammo.id) {
                 <option [value]="ammo.id">{{ ammo.name }}</option>
+              }
+            </select>
+          </label>
+          <label class="field wide">
+            Прицел
+            <select formControlName="scopeId">
+              @for (scope of scopeOptions(series.controls.scopeId.value); track scope.id) {
+                <option [value]="scope.id">{{ scope.name }}</option>
               }
             </select>
           </label>
@@ -143,59 +170,87 @@
             Дист., м
             <input class="num" inputmode="numeric" formControlName="dist" />
           </label>
-          <div class="field">
-            Верт., {{ units() }}
-            <app-signed-input label="Вертикальная поправка" formControlName="elev" />
-          </div>
-          <label class="field">
-            Ветер, м/с
-            <input class="num" inputmode="decimal" formControlName="windSpeed" />
-          </label>
-          <div class="field">
-            Гориз., {{ units() }}
-            <app-signed-input
-              label="Горизонтальная поправка"
-              plus="→"
-              minus="←"
-              formControlName="windCorr"
-            />
-          </div>
-          <label class="field">
-            Попаданий
-            <input class="num" inputmode="numeric" formControlName="hits" />
-          </label>
           <label class="field">
             Выстрелов
             <input class="num" inputmode="numeric" formControlName="shots" />
           </label>
-          <label class="field wide">
-            Группа, мм
-            <input class="num" inputmode="decimal" formControlName="group" />
-          </label>
-          <div class="field">
-            СТП верт., мм
-            <app-signed-input label="СТП по вертикали" plus="↑" minus="↓" formControlName="offUp" />
-          </div>
-          <div class="field">
-            СТП гориз., мм
-            <app-signed-input
-              label="СТП по горизонтали"
-              plus="→"
-              minus="←"
-              formControlName="offRight"
-            />
-          </div>
+          @if (series.controls.zeroing.value) {
+            <div class="field">
+              Подкрутил, верт., щелч.
+              <app-signed-input
+                label="Щелчки по вертикали"
+                plus="↑"
+                minus="↓"
+                formControlName="clicksUp"
+              />
+            </div>
+            <div class="field">
+              Подкрутил, гориз., щелч.
+              <app-signed-input
+                label="Щелчки по горизонтали"
+                plus="→"
+                minus="←"
+                formControlName="clicksRight"
+              />
+            </div>
+          } @else {
+            <div class="field">
+              Верт., {{ unitName(series.controls.scopeId.value) }}
+              <app-signed-input label="Вертикальная поправка" formControlName="elev" />
+            </div>
+            <label class="field">
+              Ветер, м/с
+              <input class="num" inputmode="decimal" formControlName="windSpeed" />
+            </label>
+            <div class="field">
+              Гориз., {{ unitName(series.controls.scopeId.value) }}
+              <app-signed-input
+                label="Горизонтальная поправка"
+                plus="→"
+                minus="←"
+                formControlName="windCorr"
+              />
+            </div>
+            <label class="field">
+              Попаданий
+              <input class="num" inputmode="numeric" formControlName="hits" />
+            </label>
+            <label class="field wide">
+              Группа, мм
+              <input class="num" inputmode="decimal" formControlName="group" />
+            </label>
+            <div class="field">
+              СТП верт., мм
+              <app-signed-input
+                label="СТП по вертикали"
+                plus="↑"
+                minus="↓"
+                formControlName="offUp"
+              />
+            </div>
+            <div class="field">
+              СТП гориз., мм
+              <app-signed-input
+                label="СТП по горизонтали"
+                plus="→"
+                minus="←"
+                formControlName="offRight"
+              />
+            </div>
+          }
           <label class="field wide">Заметка<input formControlName="note" /></label>
         </div>
-        <label class="check">
-          <input type="checkbox" formControlName="skip" />
-          Не учитывать
-        </label>
-        @if (series.controls.skip.value) {
-          <label class="field">
-            Почему
-            <input formControlName="skipReason" placeholder="флаер, эксперимент, сбит ноль" />
+        @if (!series.controls.zeroing.value) {
+          <label class="check">
+            <input type="checkbox" formControlName="skip" />
+            Не учитывать
           </label>
+          @if (series.controls.skip.value) {
+            <label class="field">
+              Почему
+              <input formControlName="skipReason" placeholder="флаер, эксперимент, сбит ноль" />
+            </label>
+          }
         }
         @if (i === coldCard() && !standalone()) {
           <ng-container [ngTemplateOutlet]="coldBlock" />

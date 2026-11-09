@@ -167,3 +167,20 @@
   border-color: var(--bad);
   color: var(--bad);
 }
+
+.zeroing {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+.zeroing b {
+  color: var(--pen);
+}
+
+.zeroing .muted {
+  font-size: 13px;
+}

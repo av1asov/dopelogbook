@@ -1,0 +1,101 @@
+.seg.units {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.seg.units button {
+  padding: 0;
+  font-size: 14px;
+}
+
+.plain {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15px;
+}
+
+.grow {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.status,
+.height-label {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.height {
+  flex: none;
+  width: 58px;
+  height: 44px;
+  padding: 0 6px;
+  background: var(--paper);
+}
+
+.toggle {
+  flex: none;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.toggle.install {
+  background: var(--mark);
+  color: var(--mark-ink);
+}
+
+.remove {
+  flex: none;
+  width: 32px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.bind {
+  padding: 0 12px;
+}
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 6px;
+  padding: 4px 12px 12px;
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.btn.danger {
+  border-color: var(--bad);
+  color: var(--bad);
+}

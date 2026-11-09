@@ -47,26 +47,30 @@ export class JournalPage {
 
   private card(session: Session) {
     const filter = this.view.ammoId();
-    const shown = session.series
+    const matching = session.series
       .map((series, si) => ({ series, si }))
       .filter(({ series }) => !filter || series.ammoId === filter);
+    const shown = matching.filter(({ series }) => series.kind === 'normal');
+    const zeroing = matching.length - shown.length;
 
     const stances = new Set(shown.map(({ series }) => stanceName(series)));
     const stance = stances.size === 1 ? [...stances][0] : '';
     const out = shown.filter(({ series }) => !seriesStatus(series).use).length;
     const details = [
       stance,
+      zeroing ? `пристрелка: ${zeroing} сер.` : '',
       session.coldShot ? 'холодный ствол: 1' : '',
       session.photos?.length ? `фото: ${session.photos.length}` : '',
       session.notes ? 'есть заметки' : '',
     ].filter(Boolean);
 
+    const lastEvent = session.zeroEvents?.at(-1);
     return {
       id: session.id,
       date: shortDate(session.date),
       place: session.place || 'Без места',
       open: !!session.open,
-      zero: session.rezero ? `ноль ${session.rezero.dist} м` : '',
+      zero: lastEvent ? `ноль ${lastEvent.dist} м` : '',
       summary: [fmtTemp(session.temp), `${sessionRounds(session)} выстр.`]
         .filter(Boolean)
         .join(' · '),

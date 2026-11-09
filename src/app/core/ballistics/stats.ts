@@ -1,6 +1,6 @@
 import { ammoById, combosOf, sessionsOf } from './diary';
-import { afterZero, dopePoints, interp, zeroInfo } from './dope';
-import { Ammo, Diary, Rifle, Series, Session, Units } from './model';
+import { afterZero, dopePoints, interp, ZERO_TOLERANCE, zeroInfo } from './dope';
+import { Ammo, Diary, Rifle, Series, Session } from './model';
 import {
   elevEff,
   isStable,
@@ -62,10 +62,15 @@ const average = (values: readonly number[]): number =>
   values.reduce((sum, v) => sum + v, 0) / values.length;
 
 /** Groups of 3+ shots, newest session first. */
-export function groupsOf(d: Diary, rifleId: string, ammoId?: string | null): GroupEntry[] {
+export function groupsOf(
+  d: Diary,
+  rifleId: string,
+  ammoId?: string | null,
+  scopeId?: string | null,
+): GroupEntry[] {
   return sessionsOf(d, rifleId, ammoId).flatMap((session) =>
     session.series.flatMap((series, si): GroupEntry[] => {
-      if (!seriesMatches(series, ammoId)) return [];
+      if (!seriesMatches(series, ammoId, '*', '*', scopeId)) return [];
       const angle = seriesGroupAng(session, si);
       return angle == null ? [] : [{ session, series, angle }];
     }),
@@ -77,8 +82,9 @@ export function groupStats(
   rifleId: string,
   ammoId?: string | null,
   stableOnly = false,
+  scopeId?: string | null,
 ): GroupStats | null {
-  const values = groupsOf(d, rifleId, ammoId)
+  const values = groupsOf(d, rifleId, ammoId, scopeId)
     .filter((g) => !stableOnly || isStable(g.series))
     .map((g) => g.angle);
   if (!values.length) return null;
@@ -86,9 +92,9 @@ export function groupStats(
 }
 
 /** Best stance first. */
-export function stanceStats(d: Diary, rifleId: string): StanceRow[] {
+export function stanceStats(d: Diary, rifleId: string, scopeId?: string | null): StanceRow[] {
   const byStance = new Map<string, { pos: string; rest: string; values: number[] }>();
-  for (const { series, angle } of groupsOf(d, rifleId)) {
+  for (const { series, angle } of groupsOf(d, rifleId, null, scopeId)) {
     const pos = series.pos || '';
     const rest = series.rest || '';
     const key = `${pos}|${rest}`;
@@ -119,11 +125,15 @@ export function coldStats(d: Diary, rifleId: string): ColdStats | null {
 }
 
 /** Stable rests only, tightest ammo first. Values are in mrad. */
-export function ammoComparison(d: Diary, rifle: Rifle): AmmoComparisonRow[] {
+export function ammoComparison(
+  d: Diary,
+  rifle: Rifle,
+  scopeId?: string | null,
+): AmmoComparisonRow[] {
   return combosOf(d, rifle)
     .flatMap((combo): AmmoComparisonRow[] => {
       const ammo = ammoById(d, combo.ammoId);
-      const values = groupsOf(d, rifle.id, combo.ammoId)
+      const values = groupsOf(d, rifle.id, combo.ammoId, scopeId)
         .filter((g) => isStable(g.series))
         .map((g) => g.angle);
       return ammo && values.length ? [{ ammo, values, avg: average(values) }] : [];
@@ -131,28 +141,28 @@ export function ammoComparison(d: Diary, rifle: Rifle): AmmoComparisonRow[] {
     .sort((a, b) => a.avg - b.avg);
 }
 
-/** Every usable series after the current zero, compared with the DOPE card. */
+/** Every usable series after the current zero, compared with the DOPE card. Values are mrad. */
 export function correctionStability(
   d: Diary,
   rifleId: string,
+  scopeId: string,
   ammoId: string,
-  units: Units,
 ): StabilityPoint[] {
-  const tolerance = units === 'MOA' ? 0.7 : 0.2;
-  const zero = zeroInfo(d, rifleId);
-  const card = dopePoints(d, rifleId, ammoId).elev;
-  return sessionsOf(d, rifleId, ammoId)
-    .filter((session) => afterZero(session, zero))
-    .flatMap((session) =>
-      session.series.flatMap((series): StabilityPoint[] => {
-        if (!seriesMatches(series, ammoId) || !seriesStatus(series).use) return [];
-        const dist = series.dist as number;
-        const value = elevEff(series, units) as number;
-        const ref = interp(card, dist);
-        const deviation = ref && Math.abs(value - ref.v) >= tolerance ? value - ref.v : null;
-        return [{ session, series, dist, value, deviation }];
-      }),
-    );
+  const zero = zeroInfo(d, rifleId, scopeId);
+  const card = dopePoints(d, rifleId, scopeId, ammoId).elev;
+  return sessionsOf(d, rifleId, ammoId).flatMap((session) =>
+    session.series.flatMap((series, si): StabilityPoint[] => {
+      if (!seriesMatches(series, ammoId, '*', '*', scopeId) || !seriesStatus(series).use) {
+        return [];
+      }
+      if (!afterZero(session, si, zero)) return [];
+      const dist = series.dist as number;
+      const value = elevEff(series) as number;
+      const ref = interp(card, dist);
+      const deviation = ref && Math.abs(value - ref.v) >= ZERO_TOLERANCE ? value - ref.v : null;
+      return [{ session, series, dist, value, deviation }];
+    }),
+  );
 }
 
 /** Cumulative rounds per session, oldest first. */

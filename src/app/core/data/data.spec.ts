@@ -5,6 +5,7 @@ import { Diary, Session } from '../ballistics/model';
 import golden from '../ballistics/testing/example.golden.json';
 import { goldenSnapshot } from '../ballistics/testing/golden-snapshot';
 import exampleV1 from './testing/example.v1.json';
+import Dexie from 'dexie';
 import { BackupError, buildBackup, dataUrlToBlob, parseBackup, summarize } from './backup';
 import { DiaryDb, Snapshot } from './db';
 import { DIARY_DB, DiaryRepository } from './repository';
@@ -50,7 +51,12 @@ const sessionOf = (doc: Record<string, unknown>): Session => {
   return snapshot.sessions[0];
 };
 
-const toDiary = ({ rifles, ammo, sessions }: Snapshot): Diary => ({ rifles, ammo, sessions });
+const toDiary = ({ scopes, rifles, ammo, sessions }: Snapshot): Diary => ({
+  scopes,
+  rifles,
+  ammo,
+  sessions,
+});
 
 function exampleIds(snapshot: Snapshot) {
   const named = (name: string) => snapshot.ammo.find((a) => a.name === name || a.maker === name);
@@ -113,7 +119,8 @@ describe('older record layouts', () => {
     );
     const rifle = snapshot.rifles[0];
     const [session] = snapshot.sessions;
-    expect(rifle.units).toBe('MIL');
+    expect(snapshot.scopes[0].units).toBe('MRAD');
+    expect(rifle.mounts).toEqual([{ scopeId: 'scope-r', mounted: true }]);
     expect(rifle.caliber).toBe('.308');
     expect(rifle.combos).toEqual([
       { ammoId: 'r-l1', velocity: 800 },
@@ -139,8 +146,8 @@ describe('older record layouts', () => {
       ],
     });
     expect(session.series).toEqual([
-      { ammoId: 'a', device: 'ДТК', dist: 100, elev: 0 },
-      { ammoId: 'a', device: 'ДТК', dist: 200, elev: 1 },
+      { kind: 'normal', scopeId: 'scope-r', ammoId: 'a', device: 'ДТК', dist: 100, elev: 0 },
+      { kind: 'normal', scopeId: 'scope-r', ammoId: 'a', device: 'ДТК', dist: 200, elev: 1 },
     ]);
   });
 });
@@ -172,6 +179,8 @@ describe('cold barrel conversion', () => {
     );
     expect(snapshot.sessions[0].series).toEqual([
       {
+        kind: 'normal',
+        scopeId: 'scope-r',
         ammoId: 'a',
         dist: 100,
         elev: 0,
@@ -181,6 +190,111 @@ describe('cold barrel conversion', () => {
       },
     ]);
     expect(warnings.extraColdSeries).toBe(1);
+  });
+});
+
+describe('moving to separate scopes', () => {
+  const stamp = '2026-11-01T00:00:00.000Z';
+  const rifleV2 = {
+    id: 'r',
+    createdAt: stamp,
+    updatedAt: stamp,
+    name: 'R',
+    scope: 'Artelv CRS',
+    units: 'MOA',
+    click: 0.25,
+    sightHeight: 45,
+    combos: [{ ammoId: 'a' }],
+  };
+  const sessionV2 = {
+    id: 's',
+    createdAt: stamp,
+    updatedAt: stamp,
+    rifleId: 'r',
+    date: '2026-01-01',
+    rezero: { dist: 100 },
+    series: [{ ammoId: 'a', dist: 300, elev: 3.4377, windCorr: 1.71885, shots: 5 }],
+  };
+
+  const check = ({
+    scopes,
+    rifles,
+    sessions,
+  }: Pick<Snapshot, 'scopes' | 'rifles' | 'sessions'>) => {
+    expect(scopes).toEqual([
+      {
+        id: 'scope-r',
+        createdAt: stamp,
+        updatedAt: stamp,
+        name: 'Artelv CRS',
+        type: 'optic',
+        units: 'MOA',
+        click: 0.25,
+      },
+    ]);
+    expect(rifles[0].mounts).toEqual([{ scopeId: 'scope-r', sightHeight: 45, mounted: true }]);
+    expect(rifles[0]).not.toHaveProperty('units');
+    expect(rifles[0]).not.toHaveProperty('scope');
+    const [session] = sessions;
+    expect(session).not.toHaveProperty('rezero');
+    expect(session.zeroEvents).toEqual([
+      { afterSi: -1, dist: 100, ammoId: 'a', scopeId: 'scope-r' },
+    ]);
+    expect(session.series[0].kind).toBe('normal');
+    expect(session.series[0].scopeId).toBe('scope-r');
+    expect(session.series[0].elev).toBeCloseTo(1, 9);
+    expect(session.series[0].windCorr).toBeCloseTo(0.5, 9);
+  };
+
+  it('reads a version 2 file', () => {
+    const docs = {
+      r: { ...rifleV2, kind: 'rifle' },
+      a: { id: 'a', createdAt: stamp, updatedAt: stamp, kind: 'ammo', type: 'factory' },
+      s: { ...sessionV2, kind: 'session' },
+    };
+    check(parseBackup(JSON.stringify({ format: 'dope-diary', version: 2, docs })).snapshot);
+  });
+
+  it('turns MIL into MRAD and leaves the numbers alone', () => {
+    const { snapshot } = parseBackup(
+      v1({
+        r: { ...rifleDoc, click: 0.1 },
+        a: ammoDoc,
+        s: {
+          kind: 'session',
+          rifleId: 'r',
+          date: '2026-01-01',
+          series: [{ ammoId: 'a', elev: 2.3 }],
+        },
+      }),
+    );
+    expect(snapshot.scopes[0].units).toBe('MRAD');
+    expect(snapshot.sessions[0].series[0].elev).toBe(2.3);
+  });
+
+  it('upgrades a diary already on the device', async () => {
+    const name = 'upgrade-test';
+    const old = new Dexie(name);
+    old.version(1).stores({
+      rifles: 'id',
+      ammo: 'id',
+      sessions: 'id, rifleId, date',
+      photos: 'id',
+      settings: 'key',
+    });
+    await old.open();
+    await old.table('rifles').put(rifleV2);
+    await old.table('sessions').put(sessionV2);
+    old.close();
+
+    const db = new DiaryDb(name);
+    await db.open();
+    check({
+      scopes: await db.scopes.toArray(),
+      rifles: await db.rifles.toArray(),
+      sessions: await db.sessions.toArray(),
+    });
+    await db.delete();
   });
 });
 
@@ -288,11 +402,12 @@ describe('repository', () => {
       const photo = dataUrlToBlob(PIXEL);
       const photoId = await repository.putPhoto(photo);
       await repository.put('ammo', { id: 'a', type: 'factory', name: 'A' });
+      await repository.put('scope', { id: 'c', name: 'C', type: 'optic', units: 'MRAD' });
       await repository.put('rifle', {
         id: 'r',
         name: 'R',
-        units: 'MIL',
         combos: [{ ammoId: 'a' }],
+        mounts: [{ scopeId: 'c', mounted: true }],
       });
       await repository.put('session', {
         id: 's',
@@ -300,7 +415,10 @@ describe('repository', () => {
         date: '2026-01-01',
         coldShot: { si: 0, offUp: 20 },
         photos: [{ id: photoId, si: 0 }],
-        series: [{ ammoId: 'a', dist: 100, elev: 0, shots: 5, hits: 5 }],
+        zeroEvents: [{ afterSi: -1, dist: 100, scopeId: 'c' }],
+        series: [
+          { kind: 'normal', scopeId: 'c', ammoId: 'a', dist: 100, elev: 0, shots: 5, hits: 5 },
+        ],
       });
       return photoId;
     }
@@ -315,11 +433,15 @@ describe('repository', () => {
       const before = await repository.snapshot();
       const text = await exportText();
 
-      await repository.restore({ rifles: [], ammo: [], sessions: [], photos: [] }, 'replace');
-      expect(await repository.diary()).toEqual({ rifles: [], ammo: [], sessions: [] });
+      await repository.restore(
+        { scopes: [], rifles: [], ammo: [], sessions: [], photos: [] },
+        'replace',
+      );
+      expect(await repository.diary()).toEqual({ scopes: [], rifles: [], ammo: [], sessions: [] });
 
       await repository.restore(parseBackup(text).snapshot, 'replace');
       const after = await repository.snapshot();
+      expect(after.scopes).toEqual(before.scopes);
       expect(after.rifles).toEqual(before.rifles);
       expect(after.ammo).toEqual(before.ammo);
       expect(after.sessions).toEqual(before.sessions);
@@ -340,7 +462,10 @@ describe('repository', () => {
     it('add brings in documents the device lacks', async () => {
       await fill();
       const text = await exportText();
-      await repository.restore({ rifles: [], ammo: [], sessions: [], photos: [] }, 'replace');
+      await repository.restore(
+        { scopes: [], rifles: [], ammo: [], sessions: [], photos: [] },
+        'replace',
+      );
       await repository.put('ammo', { id: 'other', type: 'factory', name: 'Other' });
       await repository.restore(parseBackup(text).snapshot, 'add');
       expect((await repository.list('ammo')).map((a) => a.id).sort()).toEqual(['a', 'other']);

@@ -59,15 +59,40 @@
 
 .zero {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px 12px;
   background: var(--sheet);
-  border: 1px solid var(--rule);
+  border: 2px solid var(--pen);
   font-size: 15px;
 }
 
-.zero input {
+.zero-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.zero-plan {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pen);
+  font-size: 14px;
+  text-align: left;
+}
+
+.zero-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zero-toggle input {
   width: 22px;
   height: 22px;
   margin: 0;

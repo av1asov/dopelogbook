@@ -1,0 +1,43 @@
+<div class="screen">
+  <div class="top-row">
+    <a routerLink="/more" class="back">‹ Ещё</a>
+    <a routerLink="/more/scopes/new" class="btn-mark add">+ Прицел</a>
+  </div>
+  <h1 class="screen-title">Прицелы</h1>
+
+  @for (card of cards(); track card.scope.id) {
+    <article class="card">
+      <a class="title-row" [routerLink]="['/more/scopes', card.scope.id]">
+        <span class="name">{{ card.scope.name }}</span>
+        <span class="badge type" [class.thermal]="card.thermal">{{ card.type }}</span>
+        <span class="muted arrow">›</span>
+      </a>
+      <span class="muted specs">{{ card.specs }}</span>
+      @if (card.rifles.length) {
+        <div class="rifles">
+          @for (rifle of card.rifles; track rifle.id) {
+            <span>
+              <b>{{ rifle.name }}</b> · {{ rifle.mounted ? 'установлен' : 'снят' }} ·
+              {{ rifle.zero }}
+            </span>
+            @if (!rifle.mounted) {
+              <span class="muted">После установки проверьте ноль контрольной группой.</span>
+            }
+          }
+        </div>
+      }
+    </article>
+  } @empty {
+    <div class="card">
+      <b>Прицелов нет</b>
+      <span class="hint">Добавьте прицел и установите его на винтовку.</span>
+    </div>
+  }
+
+  @if (cards().length) {
+    <p class="hint">
+      Прицел можно переставлять между винтовками. Ноль и DOPE-карта — свои для каждой пары «винтовка
+      + прицел», ресурс ствола — общий.
+    </p>
+  }
+</div>

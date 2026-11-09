@@ -19,10 +19,22 @@
       }
     </div>
 
-    @if (s.rezero; as zero) {
-      <span class="zero"
-        >Выставлен ноль: <b>{{ zero.dist }} м</b></span
-      >
+    @if (zeroing(); as z) {
+      <div class="zeroing">
+        <span><b>Пристрелка</b> · {{ z.summary }}</span>
+        <span class="muted">
+          @for (mark of zeroMarks(); track mark) {
+            ноль {{ mark }} ·
+          }
+          только в ресурс
+        </span>
+      </div>
+    } @else {
+      @for (mark of zeroMarks(); track mark) {
+        <span class="zero"
+          >Выставлен ноль: <b>{{ mark }}</b></span
+        >
+      }
     }
     @if (standaloneCold(); as cold) {
       <span class="pen">
@@ -39,7 +51,7 @@
       }
       <article class="card series">
         <div class="series-head">
-          <span class="number num">{{ row.si + 1 }}</span>
+          <span class="number num">{{ row.number }}</span>
           <b class="num dist">{{ row.dist }}</b>
           <span class="pill" [class.off]="!row.use">{{ row.use ? 'в карте' : 'не в карте' }}</span>
         </div>
@@ -85,7 +97,7 @@
               <button
                 type="button"
                 class="thumb"
-                [attr.aria-label]="'Фото мишени серии ' + (row.si + 1)"
+                [attr.aria-label]="'Фото мишени серии ' + row.number"
                 (click)="viewing.set(photo.id)"
               >
                 <app-photo [photoId]="photo.id" />

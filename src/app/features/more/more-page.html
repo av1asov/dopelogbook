@@ -7,6 +7,11 @@
       <span class="num muted">{{ store.rifles().length }}</span>
       <span class="muted">›</span>
     </a>
+    <a routerLink="/more/scopes" class="row">
+      <span class="grow">Прицелы</span>
+      <span class="num muted">{{ store.scopes().length }}</span>
+      <span class="muted">›</span>
+    </a>
     <a routerLink="/more/ammo" class="row">
       <span class="grow">Патроны</span>
       <span class="num muted">{{ store.ammo().length }}</span>
@@ -27,10 +32,10 @@
         </button>
         <button
           type="button"
-          [attr.aria-pressed]="settings.groupUnit() === 'MIL'"
-          (click)="settings.setGroupUnit('MIL')"
+          [attr.aria-pressed]="settings.groupUnit() === 'MRAD'"
+          (click)="settings.setGroupUnit('MRAD')"
         >
-          MIL
+          MRAD
         </button>
       </span>
     </div>

@@ -1,6 +1,6 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
 import { Table } from 'dexie';
-import { Ammo, Diary, Doc, Rifle, Session } from '../ballistics/model';
+import { Ammo, Diary, Doc, Rifle, Scope, Session } from '../ballistics/model';
 import { DiaryDb, Snapshot, StoredPhoto } from './db';
 
 export const DIARY_DB = new InjectionToken<DiaryDb>('DIARY_DB', {
@@ -9,6 +9,7 @@ export const DIARY_DB = new InjectionToken<DiaryDb>('DIARY_DB', {
 });
 
 export interface DocByKind {
+  scope: Scope;
   rifle: Rifle;
   ammo: Ammo;
   session: Session;
@@ -30,7 +31,12 @@ export class DiaryRepository {
   private readonly db = inject(DIARY_DB);
 
   private table<K extends DocKind>(kind: K): Table<DocByKind[K], string> {
-    const tables = { rifle: this.db.rifles, ammo: this.db.ammo, session: this.db.sessions };
+    const tables = {
+      scope: this.db.scopes,
+      rifle: this.db.rifles,
+      ammo: this.db.ammo,
+      session: this.db.sessions,
+    };
     return tables[kind] as unknown as Table<DocByKind[K], string>;
   }
 
@@ -60,7 +66,7 @@ export class DiaryRepository {
     const deletedAt = now();
     const stamp = { deletedAt, updatedAt: deletedAt };
     const { db } = this;
-    await db.transaction('rw', db.rifles, db.ammo, db.sessions, db.photos, async () => {
+    await db.transaction('rw', db.scopes, db.rifles, db.ammo, db.sessions, db.photos, async () => {
       const doc = await this.table(kind).get(id);
       if (!doc) return;
       await this.table(kind).update(id, stamp as never);
@@ -70,12 +76,13 @@ export class DiaryRepository {
   }
 
   async diary(): Promise<Diary> {
-    const [rifles, ammo, sessions] = await Promise.all([
+    const [scopes, rifles, ammo, sessions] = await Promise.all([
+      this.list('scope'),
       this.list('rifle'),
       this.list('ammo'),
       this.list('session'),
     ]);
-    return { rifles, ammo, sessions };
+    return { scopes, rifles, ammo, sessions };
   }
 
   async putPhoto(blob: Blob, id: string = crypto.randomUUID()): Promise<string> {
@@ -113,14 +120,15 @@ export class DiaryRepository {
   }
 
   async snapshot(): Promise<Snapshot> {
-    const { rifles, ammo, sessions, photos } = this.db;
-    const [r, a, s, p] = await Promise.all([
+    const { scopes, rifles, ammo, sessions, photos } = this.db;
+    const [c, r, a, s, p] = await Promise.all([
+      scopes.toArray(),
       rifles.toArray(),
       ammo.toArray(),
       sessions.toArray(),
       photos.toArray(),
     ]);
-    return { rifles: r, ammo: a, sessions: s, photos: p };
+    return { scopes: c, rifles: r, ammo: a, sessions: s, photos: p };
   }
 
   /**
@@ -129,7 +137,8 @@ export class DiaryRepository {
    */
   async restore(snapshot: Snapshot, mode: RestoreMode): Promise<void> {
     const { db } = this;
-    await db.transaction('rw', db.rifles, db.ammo, db.sessions, db.photos, async () => {
+    await db.transaction('rw', db.scopes, db.rifles, db.ammo, db.sessions, db.photos, async () => {
+      await this.restoreTable(db.scopes, snapshot.scopes, mode);
       await this.restoreTable(db.rifles, snapshot.rifles, mode);
       await this.restoreTable(db.ammo, snapshot.ammo, mode);
       await this.restoreTable(db.sessions, snapshot.sessions, mode);

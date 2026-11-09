@@ -9,7 +9,7 @@
       <button
         type="button"
         class="link"
-        aria-label="Выбрать патрон и опору"
+        aria-label="Выбрать патрон, прицел и опору"
         (click)="sheetOpen.set(true)"
       >
         Связка ▾
@@ -82,7 +82,10 @@
     <h1 class="screen-title">DOPE-карта</h1>
     <div class="card">
       @if (view.rifle(); as rifle) {
-        @if (!hasCombos()) {
+        @if (!hasScope()) {
+          <b>На «{{ rifle.name }}» нет прицела</b>
+          <a class="btn-mark" [routerLink]="['/more/rifles', rifle.id]">Добавить прицел</a>
+        } @else if (!hasCombos()) {
           <b>У «{{ rifle.name }}» нет патронов</b>
           <a class="btn-mark" [routerLink]="['/more/rifles', rifle.id]">Привязать патрон</a>
         }

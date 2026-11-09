@@ -24,6 +24,12 @@
         <a [routerLink]="['/more/rifles', current.id]">Привязать</a>
       </div>
     }
+    @if (!hasScope(current)) {
+      <div class="notice">
+        На этой винтовке нет прицела.
+        <a [routerLink]="['/more/rifles', current.id]">Добавить</a>
+      </div>
+    }
   }
 
   <div class="date-place">
@@ -67,15 +73,51 @@
     </span>
   </section>
 
-  <label class="zero">
-    <input type="checkbox" formControlName="rezero" />
-    <span>
-      Сегодня выставляю ноль
-      <span class="hint block">можно отметить и позже, в записи</span>
-    </span>
-  </label>
+  <section class="zero">
+    <label class="zero-toggle">
+      <input type="checkbox" formControlName="zeroingOn" />
+      Начать с пристрелки
+    </label>
+    @if (form.controls.zeroingOn.value && rifle(); as current) {
+      <button type="button" class="zero-plan" (click)="editingZero.set(!editingZero())">
+        Ноль на <b>{{ form.controls.zeroDist.value }} м</b> · {{ zeroAmmoName() }} ·
+        {{ zeroScopeName() }} ›
+      </button>
+      @if (editingZero()) {
+        <div class="zero-fields">
+          <label class="field">
+            Дистанция, м
+            <input class="num" inputmode="numeric" formControlName="zeroDist" />
+          </label>
+          <label class="field">
+            Патрон
+            <select formControlName="zeroAmmo">
+              @for (ammo of ammoOptions(current); track ammo.id) {
+                <option [value]="ammo.id">{{ ammo.name }}</option>
+              }
+            </select>
+          </label>
+          <label class="field">
+            Прицел
+            <select formControlName="zeroScope">
+              @for (scope of scopeOptions(current); track scope.id) {
+                <option [value]="scope.id">{{ scope.name }}</option>
+              }
+            </select>
+          </label>
+        </div>
+      }
+      <span class="hint">
+        Серии пристрелки пойдут только в ресурс ствола, пока не нажмёте «Ноль выставлен».
+      </span>
+    }
+  </section>
 
-  <button class="btn-mark go" type="submit" [disabled]="!rifle()?.combos?.length || busy()">
+  <button
+    class="btn-mark go"
+    type="submit"
+    [disabled]="!rifle()?.combos?.length || !hasScope(rifle()) || busy()"
+  >
     На рубеж
   </button>
 </form>

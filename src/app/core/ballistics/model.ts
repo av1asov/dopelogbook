@@ -1,6 +1,11 @@
-export type Units = 'MIL' | 'MOA';
+/** MRAD and MIL are the same unit under two names; the scope's own name is what is shown. */
+export type ScopeUnits = 'MRAD' | 'MIL' | 'MOA' | 'CM100' | 'MM100';
+export type ScopeType = 'optic' | 'thermal' | 'red-dot';
+/** Unit for group sizes. Corrections always use the units of their scope. */
+export type GroupUnit = 'MOA' | 'MRAD';
 export type Position = 'prone' | 'sit' | 'kneel' | 'stand';
 export type Rest = 'bench' | 'bipod' | 'bag' | 'barricade' | 'tripod' | 'sling' | 'none';
+export type SeriesKind = 'normal' | 'zeroing';
 
 export interface Doc {
   id: string;
@@ -9,22 +14,37 @@ export interface Doc {
   deletedAt?: string;
 }
 
+export interface Scope extends Doc {
+  name: string;
+  type: ScopeType;
+  units: ScopeUnits;
+  /** One click, in the scope's units. */
+  click?: number | null;
+  magnification?: string;
+  notes?: string;
+}
+
 export interface Combo {
   ammoId: string;
   velocity?: number | null;
+}
+
+export interface Mount {
+  scopeId: string;
+  /** Height over the bore, mm. It depends on the mount, so it belongs to the rifle. */
+  sightHeight?: number | null;
+  /** At most one scope per rifle is mounted. */
+  mounted: boolean;
 }
 
 export interface Rifle extends Doc {
   name: string;
   caliber?: string;
   barrel?: string;
-  units: Units;
-  click?: number | null;
-  sightHeight?: number | null;
-  scope?: string;
   devices?: string[];
   notes?: string;
   combos: Combo[];
+  mounts: Mount[];
 }
 
 export interface Ammo extends Doc {
@@ -45,13 +65,18 @@ export interface Ammo extends Doc {
 }
 
 export interface Series {
+  /** `zeroing` counts towards barrel life only: never the card, groups or statistics. */
+  kind: SeriesKind;
+  scopeId: string;
   ammoId: string;
   device?: string;
   pos?: Position | '';
   rest?: Rest | '';
   dist?: number | null;
+  /** Elevation, mrad. Shown in the units of the series' scope. */
   elev?: number | null;
   windSpeed?: number | null;
+  /** Windage, mrad, positive right. Shown in the units of the series' scope. */
   windCorr?: number | null;
   hits?: number | null;
   shots?: number | null;
@@ -61,6 +86,10 @@ export interface Series {
   offUp?: number | null;
   /** Group centre relative to the point of aim, mm, positive right. */
   offRight?: number | null;
+  /** Zeroing only: clicks dialled after the series, positive up. */
+  clicksUp?: number | null;
+  /** Zeroing only: clicks dialled after the series, positive right. */
+  clicksRight?: number | null;
   skip?: boolean;
   skipReason?: string;
   note?: string;
@@ -79,9 +108,19 @@ export interface ColdShot {
   standalone?: { ammoId?: string; dist?: number | null };
 }
 
-export interface Rezero {
+/** The zero was set after series `afterSi` (−1: before the first one), for one scope only. */
+export interface ZeroEvent {
+  afterSi: number;
   dist: number;
   ammoId?: string;
+  scopeId: string;
+}
+
+/** What is being zeroed while the range screen is in zeroing mode. */
+export interface ZeroingPlan {
+  dist: number;
+  ammoId: string;
+  scopeId: string;
 }
 
 export interface PhotoRef {
@@ -98,16 +137,19 @@ export interface Session extends Doc {
   altitude?: number | null;
   notes?: string;
   extraRounds?: number | null;
-  rezero?: Rezero | null;
+  zeroEvents?: ZeroEvent[];
   coldShot?: ColdShot | null;
   /** The session still in progress on the range; at most one at a time. */
   open?: boolean;
+  /** Present while the open session is zeroing. */
+  zeroing?: ZeroingPlan | null;
   photos?: PhotoRef[];
   series: Series[];
 }
 
 /** Live documents only: soft-deleted ones are filtered out before calculations. */
 export interface Diary {
+  scopes: readonly Scope[];
   rifles: readonly Rifle[];
   ammo: readonly Ammo[];
   sessions: readonly Session[];

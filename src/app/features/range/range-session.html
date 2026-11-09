@@ -11,135 +11,24 @@
   </span>
 </header>
 
-<form class="range" [formGroup]="form" (ngSubmit)="saveSeries()" novalidate>
-  <div class="series-head">
-    <span class="series-title">Серия {{ seriesNumber() }}</span>
-    @if (cardHint(); as hint) {
-      <span class="muted card-hint">
-        {{ hint.label }} <b class="num">{{ hint.value }}</b>
-      </span>
-    }
+@if (zeroing(); as plan) {
+  <div class="zero-banner">
+    <span class="zero-title">Режим пристрелки</span>
+    <span>
+      Ноль на <b>{{ plan.dist }} м</b> · {{ zeroingAmmo() }} · {{ zeroingScope() }}
+    </span>
   </div>
+}
 
-  <section class="panel">
-    <div class="picks">
-      <button type="button" class="pick strong" (click)="pickerOpen.set(true)">
-        {{ ammoLabel() }}
-      </button>
-      <button type="button" class="pick" (click)="pickerOpen.set(true)">{{ deviceLabel() }}</button>
-      <button type="button" class="pick" (click)="pickerOpen.set(true)">{{ stanceLabel() }}</button>
-      @if (sourceNote(); as note) {
-        <span class="hint">{{ note }}</span>
-      }
+<form class="range" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  @if (zeroing()) {
+    <div class="series-head">
+      <span class="series-title">Пристрелка {{ zeroingNumber() }}</span>
+      <span class="muted card-hint">идёт только в ресурс ствола</span>
     </div>
 
-    <div class="two">
-      <div class="block">
-        <span class="label">Дистанция, м</span>
-        <app-stepper
-          minusLabel="Меньше на 25 м"
-          plusLabel="Больше на 25 м"
-          (step)="stepDist($event)"
-        >
-          <label class="tap">
-            <input
-              class="big"
-              inputmode="numeric"
-              formControlName="dist"
-              aria-label="Дистанция, м"
-            />
-          </label>
-        </app-stepper>
-      </div>
-      <div class="block">
-        <span class="label">Верт., {{ units() }}</span>
-        <app-stepper
-          minusLabel="Меньше на щелчок"
-          plusLabel="Больше на щелчок"
-          (step)="stepElev($event)"
-        >
-          <label class="tap">
-            <input
-              class="big"
-              inputmode="decimal"
-              formControlName="elev"
-              aria-label="Вертикальная поправка"
-            />
-            <span class="sub">{{ clicksText() }}</span>
-          </label>
-        </app-stepper>
-      </div>
-      <div class="block">
-        <span class="label">Ветер, м/с</span>
-        <app-stepper
-          minusLabel="Ветер слабее на 1 м/с"
-          plusLabel="Ветер сильнее на 1 м/с"
-          (step)="stepWindSpeed($event)"
-        >
-          <label class="tap">
-            <input
-              class="big"
-              inputmode="decimal"
-              formControlName="windSpeed"
-              aria-label="Скорость ветра, м/с"
-            />
-            <span class="sub">боковой</span>
-          </label>
-        </app-stepper>
-      </div>
-      <div class="block">
-        <span class="label">Гориз., {{ units() }}</span>
-        <app-stepper
-          minusLabel="Щелчок влево"
-          plusLabel="Щелчок вправо"
-          (step)="stepWindCorr($event)"
-        >
-          <label class="tap">
-            <input
-              class="big"
-              inputmode="decimal"
-              autocomplete="off"
-              aria-label="Горизонтальная поправка"
-              [value]="windCorrText()"
-              (input)="editWindCorr($event)"
-            />
-            <span class="sub">{{ windCorrSide() }}</span>
-          </label>
-        </app-stepper>
-      </div>
-    </div>
-  </section>
-
-  @if (isFirst()) {
-    <section class="panel cold" aria-label="Первый выстрел из холодного ствола">
-      <label class="cold-toggle">
-        <input type="checkbox" formControlName="cold" />
-        1-й холодный
-      </label>
-      @if (form.controls.cold.value) {
-        <div class="cold-fields">
-          <app-signed-input
-            label="Холодный выстрел по вертикали, мм"
-            plus="↑"
-            minus="↓"
-            placeholder="мм"
-            formControlName="coldUp"
-          />
-          <app-signed-input
-            label="Холодный выстрел по горизонтали, мм"
-            plus="→"
-            minus="←"
-            placeholder="мм"
-            formControlName="coldRight"
-          />
-        </div>
-      }
-    </section>
-  }
-
-  <section class="panel">
-    <div class="two">
-      <div class="block">
+    <section class="panel">
+      <div class="zero-shots">
         <span class="label">Выстрелов</span>
         <app-stepper
           minusLabel="Меньше выстрелов"
@@ -155,121 +44,335 @@
               [value]="form.controls.shots.value"
               (change)="typeShots($event)"
             />
-            @if (form.controls.cold.value) {
-              <span class="sub">с холод.</span>
-            }
+            <span class="sub">{{ zeroingShotsCaption() }}</span>
           </label>
         </app-stepper>
       </div>
-      <div class="block">
-        <span class="label">Попаданий</span>
+      <span class="label zero-divider">Подкрутил после серии, щелчков</span>
+      <div class="two">
         <app-stepper
-          minusLabel="Меньше попаданий"
-          plusLabel="Больше попаданий"
-          (step)="stepHits($event)"
+          minusLabel="Щелчок вниз"
+          plusLabel="Щелчок вверх"
+          (step)="stepClicksUp($event)"
         >
-          <label class="tap">
-            <input
-              class="big"
-              inputmode="numeric"
-              autocomplete="off"
-              aria-label="Попаданий"
-              [value]="form.controls.hits.value"
-              (change)="typeHits($event)"
-            />
-            <span class="sub">{{ hitsCaption() }}</span>
-          </label>
+          <span class="big static">{{ absolute(form.controls.clicksUp.value) }}</span>
+          <span class="sub">{{ clicksUpCaption() }}</span>
+        </app-stepper>
+        <app-stepper
+          minusLabel="Щелчок влево"
+          plusLabel="Щелчок вправо"
+          (step)="stepClicksRight($event)"
+        >
+          <span class="big static">{{ absolute(form.controls.clicksRight.value) }}</span>
+          <span class="sub">{{ clicksRightCaption() }}</span>
         </app-stepper>
       </div>
-    </div>
+      <span class="hint">Необязательно. Помогает потом понять, сколько ушло на пристрелку.</span>
+    </section>
 
-    <div class="three">
-      <label class="field">
-        Группа, мм
-        <input class="num strong-input" inputmode="decimal" formControlName="group" />
-      </label>
-      <div class="field">
-        СТП верт., мм
-        <app-signed-input label="СТП по вертикали" plus="↑" minus="↓" formControlName="offUp" />
-      </div>
-      <div class="field">
-        СТП гориз., мм
-        <app-signed-input
-          label="СТП по горизонтали"
-          plus="→"
-          minus="←"
-          formControlName="offRight"
-        />
-      </div>
-    </div>
-
-    <span class="pen-note">
-      @for (part of resultHint().parts; track part) {
-        {{ part }} ·
-      }
-      @if (resultHint().card; as card) {
-        в карту пойдёт <b class="num">{{ card }}</b>
-      } @else {
-        в карту не пойдёт: {{ resultHint().why }}
-      }
-    </span>
-
-    <div class="btn-row">
-      <button
-        type="button"
-        class="mini"
-        [class.on]="form.controls.skip.value"
-        (click)="form.controls.skip.setValue(!form.controls.skip.value)"
-      >
-        Не учитывать
-      </button>
-      <label class="mini photo" [class.on]="photos().length">
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
-          <circle cx="12" cy="13" r="3.5" />
-        </svg>
-        {{ photoBusy() ? 'Сохраняю…' : 'Фото мишени' }}
-        @if (photos().length) {
-          ({{ photos().length }})
-        }
-        <input type="file" accept="image/*" hidden (change)="addPhoto($event)" />
-      </label>
-    </div>
-    @if (form.controls.skip.value) {
-      <label class="field">
-        Почему не учитывать
-        <input formControlName="skipReason" placeholder="флаер, эксперимент, сбит ноль" />
-      </label>
+    @if (error(); as message) {
+      <p class="error">{{ message }}</p>
     }
-  </section>
 
-  @if (error(); as message) {
-    <p class="error">{{ message }}</p>
-  }
+    <button
+      type="button"
+      class="zero-more"
+      [style.opacity]="form.controls.shots.value ? 1 : 0.45"
+      [disabled]="!form.controls.shots.value"
+      (click)="recordZeroing()"
+    >
+      Записать и ещё серию пристрелки
+    </button>
+    <button type="button" class="btn-mark zero-done" (click)="zeroSet()">
+      Ноль выставлен
+      <span>дальше — контрольная группа</span>
+    </button>
 
-  <button class="btn-mark save" type="submit">Сохранить и следующая серия</button>
-
-  @if (today().length) {
-    <div class="today">
-      <span class="label">Сегодня</span>
-      @for (row of today(); track row.n) {
-        <div class="today-row num">
-          <span class="muted">{{ row.n }}</span>
-          <span>{{ row.dist }}</span>
-          <span>{{ row.elev }}</span>
-          <span>{{ row.hits }}</span>
-          @if (row.group) {
-            <span class="muted">{{ row.group }}</span>
-          }
-          @if (row.cold) {
-            <span class="pen">{{ row.cold }}</span>
-          }
-          @if (row.out) {
-            <span class="out">{{ row.out }}</span>
-          }
-        </div>
+    @if (zeroingRows().length) {
+      <div class="today">
+        <span class="label">Пристрелка сегодня · {{ zeroingTotal() }} выстр.</span>
+        @for (row of zeroingRows(); track row.si) {
+          <div class="today-row num">
+            <span class="pen">{{ row.n }}</span>
+            <span>{{ row.shots }}</span>
+            <span class="muted">{{ row.clicks }}</span>
+          </div>
+        }
+      </div>
+    }
+  } @else {
+    <div class="series-head">
+      <span class="series-title">Серия {{ seriesNumber() }}</span>
+      @if (cardHint(); as hint) {
+        <span class="muted card-hint">
+          {{ hint.label }} <b class="num">{{ hint.value }}</b>
+        </span>
       }
     </div>
+
+    <section class="panel">
+      <div class="picks">
+        <button type="button" class="pick strong" (click)="pickerOpen.set(true)">
+          {{ ammoLabel() }}
+        </button>
+        <button type="button" class="pick" (click)="pickerOpen.set(true)">
+          {{ deviceLabel() }}
+        </button>
+        <button type="button" class="pick" (click)="pickerOpen.set(true)">
+          {{ stanceLabel() }}
+        </button>
+        <button type="button" class="pick" (click)="pickerOpen.set(true)">
+          {{ scopeLabel() }}
+        </button>
+        @if (sourceNote(); as note) {
+          <span class="hint">{{ note }}</span>
+        }
+      </div>
+
+      <div class="two">
+        <div class="block">
+          <span class="label">Дистанция, м</span>
+          <app-stepper
+            minusLabel="Меньше на 25 м"
+            plusLabel="Больше на 25 м"
+            (step)="stepDist($event)"
+          >
+            <label class="tap">
+              <input
+                class="big"
+                inputmode="numeric"
+                formControlName="dist"
+                aria-label="Дистанция, м"
+              />
+            </label>
+          </app-stepper>
+        </div>
+        <div class="block">
+          <span class="label">Верт., {{ unitName() }}</span>
+          <app-stepper
+            minusLabel="Меньше на щелчок"
+            plusLabel="Больше на щелчок"
+            (step)="stepElev($event)"
+          >
+            <label class="tap">
+              <input
+                class="big"
+                inputmode="decimal"
+                formControlName="elev"
+                aria-label="Вертикальная поправка"
+              />
+              <span class="sub">{{ clicksText() }}</span>
+            </label>
+          </app-stepper>
+        </div>
+        <div class="block">
+          <span class="label">Ветер, м/с</span>
+          <app-stepper
+            minusLabel="Ветер слабее на 1 м/с"
+            plusLabel="Ветер сильнее на 1 м/с"
+            (step)="stepWindSpeed($event)"
+          >
+            <label class="tap">
+              <input
+                class="big"
+                inputmode="decimal"
+                formControlName="windSpeed"
+                aria-label="Скорость ветра, м/с"
+              />
+              <span class="sub">боковой</span>
+            </label>
+          </app-stepper>
+        </div>
+        <div class="block">
+          <span class="label">Гориз., {{ unitName() }}</span>
+          <app-stepper
+            minusLabel="Щелчок влево"
+            plusLabel="Щелчок вправо"
+            (step)="stepWindCorr($event)"
+          >
+            <label class="tap">
+              <input
+                class="big"
+                inputmode="decimal"
+                autocomplete="off"
+                aria-label="Горизонтальная поправка"
+                [value]="windCorrText()"
+                (input)="editWindCorr($event)"
+              />
+              <span class="sub">{{ windCorrSide() }}</span>
+            </label>
+          </app-stepper>
+        </div>
+      </div>
+    </section>
+
+    @if (isFirst()) {
+      <section class="panel cold" aria-label="Первый выстрел из холодного ствола">
+        <label class="cold-toggle">
+          <input type="checkbox" formControlName="cold" />
+          Холодный, мм
+        </label>
+        @if (form.controls.cold.value) {
+          <div class="cold-fields">
+            <app-signed-input
+              label="Холодный выстрел по вертикали, мм"
+              plus="↑"
+              minus="↓"
+              placeholder="мм"
+              formControlName="coldUp"
+            />
+            <app-signed-input
+              label="Холодный выстрел по горизонтали, мм"
+              plus="→"
+              minus="←"
+              placeholder="мм"
+              formControlName="coldRight"
+            />
+          </div>
+        }
+      </section>
+    }
+
+    <section class="panel">
+      <div class="two">
+        <div class="block">
+          <span class="label">Выстрелов</span>
+          <app-stepper
+            minusLabel="Меньше выстрелов"
+            plusLabel="Больше выстрелов"
+            (step)="stepShots($event)"
+          >
+            <label class="tap">
+              <input
+                class="big"
+                inputmode="numeric"
+                autocomplete="off"
+                aria-label="Выстрелов"
+                [value]="form.controls.shots.value"
+                (change)="typeShots($event)"
+              />
+              @if (form.controls.cold.value) {
+                <span class="sub">с холодным</span>
+              }
+            </label>
+          </app-stepper>
+        </div>
+        <div class="block">
+          <span class="label">Попаданий</span>
+          <app-stepper
+            minusLabel="Меньше попаданий"
+            plusLabel="Больше попаданий"
+            (step)="stepHits($event)"
+          >
+            <label class="tap">
+              <input
+                class="big"
+                inputmode="numeric"
+                autocomplete="off"
+                aria-label="Попаданий"
+                [value]="form.controls.hits.value"
+                (change)="typeHits($event)"
+              />
+              <span class="sub">{{ hitsCaption() }}</span>
+            </label>
+          </app-stepper>
+        </div>
+      </div>
+
+      <div class="three">
+        <label class="field">
+          Группа, мм
+          <input class="num strong-input" inputmode="decimal" formControlName="group" />
+        </label>
+        <div class="field">
+          СТП верт., мм
+          <app-signed-input label="СТП по вертикали" plus="↑" minus="↓" formControlName="offUp" />
+        </div>
+        <div class="field">
+          СТП гориз., мм
+          <app-signed-input
+            label="СТП по горизонтали"
+            plus="→"
+            minus="←"
+            formControlName="offRight"
+          />
+        </div>
+      </div>
+
+      <span class="pen-note">
+        @for (part of resultHint().parts; track part) {
+          {{ part }} ·
+        }
+        @if (resultHint().card; as card) {
+          в карту пойдёт <b class="num">{{ card }}</b>
+        } @else {
+          в карту не пойдёт: {{ resultHint().why }}
+        }
+      </span>
+
+      <div class="btn-row">
+        <button
+          type="button"
+          class="mini"
+          [class.on]="form.controls.skip.value"
+          (click)="form.controls.skip.setValue(!form.controls.skip.value)"
+        >
+          Не учитывать
+        </button>
+        <label class="mini photo" [class.on]="photos().length">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+            <circle cx="12" cy="13" r="3.5" />
+          </svg>
+          {{ photoBusy() ? 'Сохраняю…' : 'Фото мишени' }}
+          @if (photos().length) {
+            ({{ photos().length }})
+          }
+          <input type="file" accept="image/*" hidden (change)="addPhoto($event)" />
+        </label>
+      </div>
+      @if (form.controls.skip.value) {
+        <label class="field">
+          Почему не учитывать
+          <input formControlName="skipReason" placeholder="флаер, эксперимент, сбит ноль" />
+        </label>
+      }
+    </section>
+
+    @if (error(); as message) {
+      <p class="error">{{ message }}</p>
+    }
+
+    <button class="btn-mark save" type="submit">Сохранить и следующая серия</button>
+
+    @if (today().length) {
+      <div class="today">
+        <span class="label">Сегодня</span>
+        @for (row of today(); track row.si) {
+          <div class="today-row num">
+            @if (row.zeroing) {
+              <span class="pen">{{ row.n }}</span>
+              <span>{{ row.shots }}</span>
+              <span class="muted">{{ row.clicks }}</span>
+            } @else {
+              <span class="muted">{{ row.n }}</span>
+              <span>{{ row.dist }}</span>
+              <span>{{ row.elev }}</span>
+              <span>{{ row.hits }}</span>
+            }
+            @if (row.group) {
+              <span class="muted">{{ row.group }}</span>
+            }
+            @if (row.cold) {
+              <span class="pen">{{ row.cold }}</span>
+            }
+            @if (row.out) {
+              <span class="out">{{ row.out }}</span>
+            }
+          </div>
+        }
+      </div>
+    }
   }
 
   @if (confirmingFinish()) {
@@ -290,6 +393,7 @@
 @if (pickerOpen()) {
   <app-series-picker
     [form]="picks"
+    (scopeSelected)="changeScope($event)"
     [rifle]="rifle()"
     [seriesNumber]="seriesNumber()"
     (closed)="pickerOpen.set(false)"

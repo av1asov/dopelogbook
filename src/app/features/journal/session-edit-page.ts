@@ -12,7 +12,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { map } from 'rxjs';
+import { map, pairwise, startWith } from 'rxjs';
 import {
   afterSeriesRemoved,
   ammoById,
@@ -20,6 +20,8 @@ import {
   ColdShot,
   devName,
   firstSeriesDefaults,
+  mainScope,
+  mountsOf,
   nextSeriesDefaults,
   numText,
   parseNum,
@@ -28,8 +30,16 @@ import {
   RESTS,
   Rifle,
   rifleById,
+  scopeById,
+  ScopeUnits,
   Series,
   SeriesDefaults,
+  toMrad,
+  toUnits,
+  unitLabel,
+  unitsOf,
+  ZeroEvent,
+  zeroEventsAfterRemoval,
   zeroInfo,
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
@@ -41,22 +51,30 @@ import { SignedInput } from '../../shared/signed-input';
 const text = (value = '') => new FormControl(value, { nonNullable: true });
 const flag = (value = false) => new FormControl(value, { nonNullable: true });
 
-function seriesForm(x: Partial<Series> | SeriesDefaults) {
+/** A correction as typed on this scope; stored values have float noise after conversion. */
+const shownAngle = (mrad: number | null | undefined, units: ScopeUnits): string =>
+  mrad == null ? '' : numText(+toUnits(mrad, units).toFixed(4));
+
+function seriesForm(x: Partial<Series> | SeriesDefaults, units: ScopeUnits) {
   const series = x as Partial<Series>;
   return new FormGroup({
+    zeroing: flag(series.kind === 'zeroing'),
+    scopeId: text(series.scopeId ?? ''),
     ammoId: text(series.ammoId ?? ''),
     device: text(series.device ?? ''),
     pos: text(series.pos ?? ''),
     rest: text(series.rest ?? ''),
     dist: text(numText(series.dist)),
-    elev: text(numText(series.elev)),
+    elev: text(shownAngle(series.elev, units)),
     windSpeed: text(numText(series.windSpeed)),
-    windCorr: text(numText(series.windCorr)),
+    windCorr: text(shownAngle(series.windCorr, units)),
     hits: text(numText(series.hits)),
     shots: text(numText(series.shots)),
     group: text(numText(series.group)),
     offUp: text(numText(series.offUp)),
     offRight: text(numText(series.offRight)),
+    clicksUp: text(numText(series.clicksUp)),
+    clicksRight: text(numText(series.clicksRight)),
     note: text(series.note ?? ''),
     skip: flag(!!series.skip),
     skipReason: text(series.skipReason ?? ''),
@@ -64,6 +82,17 @@ function seriesForm(x: Partial<Series> | SeriesDefaults) {
 }
 
 type SeriesForm = ReturnType<typeof seriesForm>;
+
+function zeroEventForm(event: Partial<ZeroEvent>) {
+  return new FormGroup({
+    afterSi: text(String(event.afterSi ?? -1)),
+    dist: text(numText(event.dist)),
+    ammoId: text(event.ammoId ?? ''),
+    scopeId: text(event.scopeId ?? ''),
+  });
+}
+
+type ZeroEventForm = ReturnType<typeof zeroEventForm>;
 
 @Component({
   selector: 'app-session-edit-page',
@@ -89,9 +118,7 @@ export class SessionEditPage implements OnInit {
     altitude: text(),
     extraRounds: text(),
     notes: text(),
-    rezeroOn: flag(),
-    rezeroDist: text('100'),
-    rezeroAmmo: text(),
+    zeroEvents: new FormArray<ZeroEventForm>([]),
     coldOn: flag(),
     coldUp: text(),
     coldRight: text(),
@@ -116,7 +143,6 @@ export class SessionEditPage implements OnInit {
     this.store.diary().sessions.find((s) => s.id === this.id()),
   );
   protected readonly rifle = computed(() => rifleById(this.store.diary(), this.rifleId()));
-  protected readonly units = computed(() => this.rifle()?.units ?? 'MIL');
   /** The cold shot block sits on its series, or on the first one for a new cold shot. */
   protected readonly coldCard = computed(() => this.cold()?.si ?? 0);
   protected readonly standalone = computed(() => !!this.cold()?.standalone);
@@ -133,22 +159,88 @@ export class SessionEditPage implements OnInit {
       altitude: numText(session.altitude),
       extraRounds: numText(session.extraRounds),
       notes: session.notes ?? '',
-      rezeroOn: !!session.rezero,
-      rezeroDist: numText(
-        session.rezero?.dist ?? zeroInfo(this.store.diary(), session.rifleId)?.dist ?? 100,
-      ),
-      rezeroAmmo: session.rezero?.ammoId ?? session.series[0]?.ammoId ?? '',
       coldOn: !!session.coldShot,
       coldUp: numText(session.coldShot?.offUp),
       coldRight: numText(session.coldShot?.offRight),
     });
-    for (const series of session.series) this.form.controls.series.push(seriesForm(series));
+    for (const series of session.series) this.pushSeries(series);
+    for (const event of session.zeroEvents ?? []) {
+      this.form.controls.zeroEvents.push(zeroEventForm(event));
+    }
     this.photos.set((session.photos ?? []).map((photo) => ({ ...photo })));
     this.cold.set(session.coldShot ?? null);
 
     this.form.controls.rifleId.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.relinkAmmo());
+      .subscribe(() => this.relink());
+  }
+
+  protected scopeOptions(current: string): { id: string; name: string }[] {
+    const diary = this.store.diary();
+    const linked = mountsOf(diary, this.rifle()).map(({ scope }) => scope.id);
+    return [...new Set([...linked, current])]
+      .filter(Boolean)
+      .map((id) => ({ id, name: scopeById(diary, id)?.name ?? '—' }));
+  }
+
+  protected unitName(scopeId: string): string {
+    return unitLabel(this.unitsFor(scopeId));
+  }
+
+  /** Where a zero mark can go: before the first series or after any of them. */
+  protected zeroMoments(): { value: string; label: string }[] {
+    const series = this.form.controls.series.getRawValue();
+    return [
+      { value: '-1', label: 'до первой серии' },
+      ...series.map((x, i) => ({
+        value: String(i),
+        label: `после серии ${i + 1}${x.dist ? ` · ${x.dist} м` : ''}`,
+      })),
+    ];
+  }
+
+  protected addZeroEvent(): void {
+    const diary = this.store.diary();
+    const rifle = this.rifle();
+    const scopeId = mainScope(diary, rifle)?.id ?? '';
+    const first = this.form.controls.series.at(0)?.controls.ammoId.value;
+    this.form.controls.zeroEvents.push(
+      zeroEventForm({
+        afterSi: -1,
+        dist: (rifle && zeroInfo(diary, rifle.id, scopeId)?.dist) || 100,
+        ammoId: first ?? rifle?.combos[0]?.ammoId ?? '',
+        scopeId,
+      }),
+    );
+  }
+
+  protected removeZeroEvent(index: number): void {
+    this.form.controls.zeroEvents.removeAt(index);
+  }
+
+  private pushSeries(series: Partial<Series> | SeriesDefaults): void {
+    const group = seriesForm(series, this.unitsFor(series.scopeId));
+    this.form.controls.series.push(group);
+    const { scopeId } = group.controls;
+    scopeId.valueChanges
+      .pipe(startWith(scopeId.value), pairwise(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(([from, to]) => this.convertAngles(group, from, to));
+  }
+
+  /** Another scope has other units; the entered angle stays the same. */
+  private convertAngles(group: SeriesForm, from: string, to: string): void {
+    const convert = (value: string): string => {
+      const parsed = parseNum(value);
+      if (parsed == null) return value;
+      return shownAngle(toMrad(parsed, this.unitsFor(from)), this.unitsFor(to));
+    };
+    const { elev, windCorr } = group.controls;
+    elev.setValue(convert(elev.value));
+    windCorr.setValue(convert(windCorr.value));
+  }
+
+  private unitsFor(scopeId: string | null | undefined): ScopeUnits {
+    return unitsOf(scopeById(this.store.diary(), scopeId));
   }
 
   protected ammoOptions(current: string): { id: string; name: string }[] {
@@ -171,7 +263,7 @@ export class SessionEditPage implements OnInit {
     const defaults = last
       ? nextSeriesDefaults(last)
       : firstSeriesDefaults(this.store.diary(), rifle as Rifle);
-    list.push(seriesForm({ ...defaults, shots: null }));
+    this.pushSeries({ ...defaults, kind: 'normal', shots: null });
   }
 
   protected removeSeries(index: number): void {
@@ -240,7 +332,7 @@ export class SessionEditPage implements OnInit {
       return;
     }
     const series = this.form.controls.series.controls.map((control) => this.toSeries(control));
-    const rezeroDist = parseNum(v.rezeroDist);
+    const zeroEvents = this.zeroEventsValue().filter((e) => e.dist > 0 && e.scopeId);
     const photos = this.photos();
     const kept = new Set(photos.map((photo) => photo.id));
     try {
@@ -260,12 +352,10 @@ export class SessionEditPage implements OnInit {
           altitude: parseNum(v.altitude),
           extraRounds: parseNum(v.extraRounds),
           notes: v.notes.trim(),
-          rezero:
-            v.rezeroOn && rezeroDist && rezeroDist > 0
-              ? compact({ dist: rezeroDist, ammoId: v.rezeroAmmo || series[0]?.ammoId })
-              : null,
+          ...(zeroEvents.length ? { zeroEvents } : {}),
           coldShot: this.coldShot(v.coldOn, v.coldUp, v.coldRight),
           open: session.open,
+          zeroing: session.zeroing,
           photos,
           series,
         }),
@@ -275,6 +365,17 @@ export class SessionEditPage implements OnInit {
       return;
     }
     await this.router.navigate(['/journal', session.id]);
+  }
+
+  private zeroEventsValue(): ZeroEvent[] {
+    return this.form.controls.zeroEvents.getRawValue().map((e) =>
+      compact({
+        afterSi: Number(e.afterSi),
+        dist: parseNum(e.dist) ?? 0,
+        ammoId: e.ammoId,
+        scopeId: e.scopeId,
+      }),
+    );
   }
 
   private coldShot(on: boolean, up: string, right: string): ColdShot | null {
@@ -303,35 +404,65 @@ export class SessionEditPage implements OnInit {
     const hadCold = this.cold() !== null;
     this.cold.set(result.coldShot);
     if (hadCold && !result.coldShot) this.form.controls.coldOn.setValue(false);
+    const moved = zeroEventsAfterRemoval(this.zeroEventsValue(), index);
+    this.form.controls.zeroEvents.controls.forEach((control, i) =>
+      control.controls.afterSi.setValue(String(moved[i].afterSi)),
+    );
   }
 
-  /** Another rifle has other ammo, so series move to its first linked one. */
-  private relinkAmmo(): void {
-    const combos = this.rifle()?.combos ?? [];
-    for (const control of this.form.controls.series.controls) {
-      if (!combos.some((c) => c.ammoId === control.controls.ammoId.value)) {
-        control.controls.ammoId.setValue(combos[0]?.ammoId ?? '');
+  /** Another rifle has other ammo and scopes, so series move to the ones it has. */
+  private relink(): void {
+    const rifle = this.rifle();
+    const combos = rifle?.combos ?? [];
+    const diary = this.store.diary();
+    const mounts = mountsOf(diary, rifle).map(({ scope }) => scope.id);
+    const fallback = mainScope(diary, rifle)?.id ?? '';
+    for (const { controls } of [
+      ...this.form.controls.series.controls,
+      ...this.form.controls.zeroEvents.controls,
+    ]) {
+      if (!combos.some((c) => c.ammoId === controls.ammoId.value)) {
+        controls.ammoId.setValue(combos[0]?.ammoId ?? '');
       }
+      if (!mounts.includes(controls.scopeId.value)) controls.scopeId.setValue(fallback);
     }
   }
 
   private toSeries(control: SeriesForm): Series {
     const v = control.getRawValue();
-    return compact({
+    const common = {
+      scopeId: v.scopeId,
       ammoId: v.ammoId,
       device: v.device,
       pos: v.pos as Series['pos'],
       rest: v.rest as Series['rest'],
       dist: parseNum(v.dist),
-      elev: parseNum(v.elev),
-      windSpeed: parseNum(v.windSpeed),
-      windCorr: parseNum(v.windCorr),
-      hits: parseNum(v.hits),
       shots: parseNum(v.shots),
+      note: v.note.trim(),
+    };
+    if (v.zeroing) {
+      return compact({
+        kind: 'zeroing' as const,
+        ...common,
+        clicksUp: parseNum(v.clicksUp),
+        clicksRight: parseNum(v.clicksRight),
+      });
+    }
+    const units = this.unitsFor(v.scopeId);
+    const angle = (value: string): number | null => {
+      const parsed = parseNum(value);
+      return parsed == null ? null : toMrad(parsed, units);
+    };
+    return compact({
+      kind: 'normal' as const,
+      ...common,
+      elev: angle(v.elev),
+      windSpeed: parseNum(v.windSpeed),
+      windCorr: angle(v.windCorr),
+      hits: parseNum(v.hits),
       group: parseNum(v.group),
       offUp: parseNum(v.offUp),
       offRight: parseNum(v.offRight),
-      note: v.note.trim(),
       ...(v.skip ? { skip: true, skipReason: v.skipReason.trim() } : {}),
     });
   }

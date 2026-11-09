@@ -1,6 +1,12 @@
 import { Diary, Rifle, Session } from './model';
-import { altitudeAt, firstSeriesDefaults, nextSeriesDefaults, recentPlaces } from './range';
-import { exampleDiary, FACTORY, HAND, rifle } from './testing/example-diary';
+import {
+  altitudeAt,
+  firstSeriesDefaults,
+  nextSeriesDefaults,
+  recentPlaces,
+  zeroingDefaults,
+} from './range';
+import { exampleDiary, FACTORY, HAND, rifle, SCOPE } from './testing/example-diary';
 
 const stamp = '2026-01-01T00:00:00.000Z';
 const session = (id: string, date: string, extra: Partial<Session> = {}): Session => ({
@@ -16,6 +22,7 @@ const session = (id: string, date: string, extra: Partial<Session> = {}): Sessio
 describe('firstSeriesDefaults', () => {
   it('continues from the last series fired, at the zero distance', () => {
     expect(firstSeriesDefaults(exampleDiary, rifle)).toEqual({
+      scopeId: SCOPE,
       ammoId: FACTORY,
       device: 'Глушитель',
       pos: 'sit',
@@ -49,6 +56,8 @@ describe('nextSeriesDefaults', () => {
   it('copies ammo, device, stance, distance and elevation but not the result', () => {
     expect(
       nextSeriesDefaults({
+        kind: 'normal',
+        scopeId: SCOPE,
         ammoId: HAND,
         device: 'ДТК',
         pos: 'prone',
@@ -63,6 +72,7 @@ describe('nextSeriesDefaults', () => {
         windCorr: 0.3,
       }),
     ).toEqual({
+      scopeId: SCOPE,
       ammoId: HAND,
       device: 'ДТК',
       pos: 'prone',
@@ -70,6 +80,24 @@ describe('nextSeriesDefaults', () => {
       dist: 300,
       elev: 2,
       shots: 3,
+    });
+  });
+});
+
+describe('after zeroing', () => {
+  it('starts a control group on the zero with a full series', () => {
+    expect(
+      nextSeriesDefaults({ kind: 'zeroing', scopeId: SCOPE, ammoId: HAND, dist: 100, shots: 3 }),
+    ).toMatchObject({ dist: 100, elev: 0, shots: 5, scopeId: SCOPE });
+  });
+});
+
+describe('zeroingDefaults', () => {
+  it('uses the mounted scope, its zero distance and zeroed ammo', () => {
+    expect(zeroingDefaults(exampleDiary, rifle)).toEqual({
+      dist: 100,
+      ammoId: HAND,
+      scopeId: SCOPE,
     });
   });
 });

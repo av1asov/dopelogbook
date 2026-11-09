@@ -28,6 +28,10 @@ export class ViewState {
   private readonly rifleId = signal<string | null>(null);
 
   readonly ammoId = signal<string | null>(null);
+  /** The card always shows one scope; null means the mounted one. */
+  readonly scopeId = signal<string | null>(null);
+  /** Filters the statistics; null means every scope. */
+  readonly statsScopeId = signal<string | null>(null);
   readonly card = signal<CardView>(DEFAULT_CARD);
 
   readonly rifle = computed(() => {
@@ -38,6 +42,8 @@ export class ViewState {
   selectRifle(id: string): void {
     this.rifleId.set(id);
     this.ammoId.set(null);
+    this.scopeId.set(null);
+    this.statsScopeId.set(null);
     this.card.update((card) => ({ ...card, device: '*', rest: '*' }));
   }
 

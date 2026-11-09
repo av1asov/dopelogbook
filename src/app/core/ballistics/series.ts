@@ -1,7 +1,75 @@
 import { fmt } from './format';
-import { Ammo, Position, Rest, Series, Session, Units } from './model';
+import {
+  Ammo,
+  GroupUnit,
+  Position,
+  Rest,
+  Scope,
+  ScopeType,
+  ScopeUnits,
+  Series,
+  Session,
+} from './model';
 
-export const MOA_PER_MIL = 3.4377;
+export const MOA_PER_MRAD = 3.4377;
+
+const MRAD_PER_UNIT: Record<ScopeUnits, number> = {
+  MRAD: 1,
+  MIL: 1,
+  MOA: 1 / MOA_PER_MRAD,
+  CM100: 0.1,
+  MM100: 0.01,
+};
+
+const DEFAULT_CLICK: Record<ScopeUnits, number> = {
+  MRAD: 0.1,
+  MIL: 0.1,
+  MOA: 0.25,
+  CM100: 1,
+  MM100: 10,
+};
+
+export const SCOPE_TYPES: readonly (readonly [ScopeType, string])[] = [
+  ['optic', 'оптика'],
+  ['thermal', 'тепловизор'],
+  ['red-dot', 'коллиматор'],
+];
+
+export const SCOPE_UNITS: readonly (readonly [ScopeUnits, string])[] = [
+  ['MRAD', 'MRAD'],
+  ['MIL', 'MIL'],
+  ['MOA', 'MOA'],
+  ['CM100', 'см/100'],
+  ['MM100', 'мм/100'],
+];
+
+/** Short enough for a table heading. */
+export const unitShort = (units: ScopeUnits): string =>
+  SCOPE_UNITS.find(([value]) => value === units)?.[1] ?? units;
+
+export const unitLabel = (units: ScopeUnits): string =>
+  units === 'CM100' || units === 'MM100' ? `${unitShort(units)} м` : units;
+
+export const defaultClick = (units: ScopeUnits): number => DEFAULT_CLICK[units];
+
+export const scopeTypeName = (type: ScopeType): string =>
+  SCOPE_TYPES.find(([value]) => value === type)?.[1] ?? '';
+
+export const unitsOf = (scope: Scope | null | undefined): ScopeUnits => scope?.units ?? 'MRAD';
+
+export const clickOf = (scope: Scope | null | undefined): number =>
+  scope?.click || DEFAULT_CLICK[unitsOf(scope)];
+
+/** As many decimals as one click has; angular units always keep at least one. */
+export function unitDigits(scope: Scope | null | undefined): number {
+  const decimals = String(clickOf(scope)).split('.')[1]?.length ?? 0;
+  const units = unitsOf(scope);
+  return units === 'CM100' || units === 'MM100' ? decimals : Math.max(1, decimals);
+}
+
+export const toMrad = (value: number, units: ScopeUnits): number => value * MRAD_PER_UNIT[units];
+
+export const toUnits = (mrad: number, units: ScopeUnits): number => mrad / MRAD_PER_UNIT[units];
 
 export const POSITIONS: readonly (readonly [Position, string])[] = [
   ['prone', 'лёжа'],
@@ -54,17 +122,14 @@ export function isStable(x: Pick<Series, 'pos' | 'rest'>): boolean {
   );
 }
 
-export const toUnits = (mrad: number, units: Units): number =>
-  units === 'MOA' ? mrad * MOA_PER_MIL : mrad;
-
-/** Elevation corrected by the group centre: a group 1 mm/m high needs 1 MIL less. */
-export function elevEff(x: Series, units: Units): number | null {
+/** Elevation corrected by the group centre, mrad: a group 1 mm/m high needs 1 mrad less. */
+export function elevEff(x: Pick<Series, 'elev' | 'offUp' | 'dist'>): number | null {
   if (x.elev == null) return null;
   if (x.offUp == null || !((x.dist ?? 0) > 0)) return x.elev;
-  return x.elev - toUnits(x.offUp / (x.dist as number), units);
+  return x.elev - x.offUp / (x.dist as number);
 }
 
-export function offText(x: Series, units: Units): string {
+export function offText(x: Pick<Series, 'offUp' | 'offRight' | 'dist'>, units: ScopeUnits): string {
   const dist = x.dist ?? 0;
   if (!(dist > 0) || (x.offUp == null && x.offRight == null)) return '';
   const parts: string[] = [];
@@ -73,7 +138,7 @@ export function offText(x: Series, units: Units): string {
   if (x.offRight) {
     parts.push((x.offRight > 0 ? '→' : '←') + fmt(toUnits(Math.abs(x.offRight) / dist, units), 2));
   }
-  return parts.length ? `${parts.join(' ')} ${units}` : 'в центре';
+  return parts.length ? `${parts.join(' ')} ${unitLabel(units)}` : 'в центре';
 }
 
 export interface SeriesStatus {
@@ -83,7 +148,8 @@ export interface SeriesStatus {
 }
 
 /** Whether the series goes into the DOPE card. */
-export function seriesStatus(x: Series): SeriesStatus {
+export function seriesStatus(x: Partial<Series>): SeriesStatus {
+  if (x.kind === 'zeroing') return { use: false, why: 'пристрелка: только в ресурс ствола' };
   if (x.skip) return { use: false, why: x.skipReason || 'исключена вручную', manual: true };
   if (x.dist == null || x.elev == null) return { use: false, why: 'нет дистанции или поправки' };
   if ((x.shots ?? 0) > 0 && !x.hits && x.offUp == null) {
@@ -99,9 +165,22 @@ export function groupAng(x: Pick<Series, 'group' | 'dist'>): number | null {
   return group > 0 && dist > 0 ? group / dist : null;
 }
 
-export function fmtAng(mrad: number | null | undefined, unit: Units): string {
+export function fmtAng(mrad: number | null | undefined, unit: GroupUnit): string {
   if (mrad == null) return '—';
-  return unit === 'MOA' ? `${fmt(mrad * MOA_PER_MIL, 2)} MOA` : `${fmt(mrad, 2)} MIL`;
+  return unit === 'MOA' ? `${fmt(mrad * MOA_PER_MRAD, 2)} MOA` : `${fmt(mrad, 2)} MRAD`;
+}
+
+/** Clicks dialled while zeroing: ↑3 ←2. */
+export function clicksText(
+  up: number | null | undefined,
+  right: number | null | undefined,
+): string {
+  return [
+    up ? `${up > 0 ? '↑' : '↓'}${Math.abs(up)}` : '',
+    right ? `${right > 0 ? '→' : '←'}${Math.abs(right)}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** Shots forming the group: the cold shot is fired in the series but stays out of the group. */
@@ -113,6 +192,7 @@ export function groupShots(s: Session, si: number): number | null {
 
 /** Angular size of a series' group, or null when it is unknown or has under 3 shots. */
 export function seriesGroupAng(s: Session, si: number): number | null {
+  if (s.series[si]?.kind === 'zeroing') return null;
   const angle = groupAng(s.series[si]);
   if (angle == null) return null;
   const shots = groupShots(s, si);
@@ -125,9 +205,11 @@ export function seriesMatches(
   ammoId: string | null | undefined,
   device = '*',
   rest = '*',
+  scopeId?: string | null,
 ): boolean {
   return (
     (!ammoId || x.ammoId === ammoId) &&
+    (!scopeId || x.scopeId === scopeId) &&
     (device === '*' || (x.device || '') === device) &&
     (rest === '*' || (x.rest || '') === rest)
   );

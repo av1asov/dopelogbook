@@ -13,21 +13,27 @@
       </span>
       <span class="facts">
         <span class="muted">Калибр</span><span>{{ card.rifle.caliber || '—' }}</span>
-        <span class="muted">Прицел</span><span>{{ card.scope }}</span>
+        <span class="muted">Прицелы</span>
+        <span class="scopes">
+          @for (scope of card.scopes; track scope.id) {
+            <span>
+              @if (scope.mounted) {
+                <b>{{ scope.name }}</b>
+              } @else {
+                {{ scope.name }} (снят)
+              }
+              · {{ scope.zero }}
+            </span>
+          } @empty {
+            не добавлены
+          }
+        </span>
         @if (card.rifle.barrel) {
           <span class="muted">Ствол</span><span>{{ card.rifle.barrel }}</span>
         }
         @if (card.rifle.devices?.length) {
           <span class="muted">Дульные</span><span>{{ card.rifle.devices?.join(', ') }}</span>
         }
-        <span class="muted">Ноль</span>
-        <span>
-          @if (card.zero; as zero) {
-            <b>{{ zero.dist }}</b> {{ zero.rest }}
-          } @else {
-            не отмечен
-          }
-        </span>
       </span>
       @if (card.combos.length) {
         <span class="combos">
@@ -56,15 +62,15 @@
     <div class="card">
       <b>Винтовок нет</b>
       <span class="hint">
-        Заведите винтовку: калибр, прицел, цена щелчка. Затем привяжите патроны, которыми из неё
-        стреляете.
+        Заведите винтовку и добавьте прицел. Затем привяжите патроны, которыми из неё стреляете.
       </span>
     </div>
   }
 
   @if (cards().length) {
     <p class="hint">
-      «На нуле» — поправка патрона на дистанции пристрелки, выводится из журнала. Кучность в
+      «На нуле» — поправка патрона на дистанции пристрелки установленного прицела, выводится из
+      журнала. Кучность в
       {{ settings.groupUnit() }}, только со стола, сошек и мешка.
     </p>
   }

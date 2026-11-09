@@ -13,45 +13,59 @@
     <label class="field wide">Название<input formControlName="name" /></label>
     <label class="field">Калибр<input formControlName="caliber" placeholder=".308 Win" /></label>
     <label class="field">Ствол<input formControlName="barrel" placeholder="длина, твист" /></label>
-    <label class="field wide">Прицел<input formControlName="scope" /></label>
-    <div class="field">
-      Единицы
-      <span class="seg">
-        <button
-          type="button"
-          [attr.aria-pressed]="form.controls.units.value === 'MIL'"
-          (click)="form.controls.units.setValue('MIL')"
-        >
-          MIL
-        </button>
-        <button
-          type="button"
-          [attr.aria-pressed]="form.controls.units.value === 'MOA'"
-          (click)="form.controls.units.setValue('MOA')"
-        >
-          MOA
-        </button>
-      </span>
-    </div>
-    <div class="field">
-      Щелчок · выс. прицела
-      <span class="pair">
-        <input
-          class="input num"
-          formControlName="click"
-          inputmode="decimal"
-          aria-label="Цена щелчка"
-        />
-        <input
-          class="input num"
-          formControlName="sightHeight"
-          inputmode="decimal"
-          placeholder="мм"
-          aria-label="Высота прицела, мм"
-        />
-      </span>
-    </div>
   </div>
+
+  <section class="section" formArrayName="mounts">
+    <h2 class="section-title">Прицелы</h2>
+    <div class="combo-list">
+      @for (mount of form.controls.mounts.controls; track mount; let i = $index) {
+        <div class="combo-row" [formGroupName]="i">
+          <span class="grow scope-name">
+            <b>{{ scopeName(mount.controls.scopeId.value) }}</b>
+            <span class="status" [class.on]="mount.controls.mounted.value">
+              {{ mountStatus(mount) }}
+            </span>
+          </span>
+          @if (!mount.controls.mounted.value) {
+            <button type="button" class="install" (click)="install(i)">Установить</button>
+          }
+          <span class="v0">выс.</span>
+          <input
+            class="input num height"
+            formControlName="sightHeight"
+            inputmode="decimal"
+            placeholder="мм"
+            [attr.aria-label]="'Высота над осью ствола: ' + scopeName(mount.controls.scopeId.value)"
+          />
+          @if (scopeSessions(mount.controls.scopeId.value); as count) {
+            <span class="locked">{{ count }} зап.</span>
+          } @else {
+            <button
+              type="button"
+              class="remove"
+              [attr.aria-label]="'Убрать ' + scopeName(mount.controls.scopeId.value)"
+              (click)="removeMount(i)"
+            >
+              ✕
+            </button>
+          }
+        </div>
+      }
+      <button type="button" class="link-btn bind" (click)="pickingScope.set(!pickingScope())">
+        + Добавить прицел
+      </button>
+      @if (pickingScope()) {
+        <div class="picker">
+          @for (scope of freeScopes(); track scope.id) {
+            <button type="button" class="chip" (click)="addScope(scope.id)">
+              {{ scope.name }}
+            </button>
+          }
+          <button type="button" class="chip dashed" (click)="createScope()">+ Новый прицел</button>
+        </div>
+      }
+    </div>
+  </section>
 
   <section class="section">
     <h2 class="section-title">Дульные устройства</h2>
@@ -138,16 +152,6 @@
   <label class="field">Заметки<textarea formControlName="notes"></textarea></label>
 
   @if (id()) {
-    <section class="section zero">
-      <h2 class="section-title">Пристрелка</h2>
-      @for (entry of zeroHistory(); track entry.id) {
-        <span
-          ><b>{{ entry.dist }} м</b> под {{ entry.ammo }} — {{ entry.date }}</span
-        >
-      }
-      <span class="hint">Ноль отмечается в записи стрельбы, здесь — только история.</span>
-    </section>
-
     @if (confirmingDelete()) {
       <div class="notice confirm">
         <span>

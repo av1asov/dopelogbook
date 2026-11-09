@@ -41,6 +41,24 @@
     }
   </div>
 
+  @if (scopes().length > 1) {
+    <div class="group">
+      <span class="section-title">Прицел</span>
+      <div class="chips">
+        @for (scope of scopes(); track scope.id) {
+          <button
+            type="button"
+            class="chip"
+            [attr.aria-pressed]="scope.id === data().scope?.id"
+            (click)="selectScope(scope.id)"
+          >
+            {{ scope.name }}
+          </button>
+        }
+      </div>
+    </div>
+  }
+
   @if (devices().length > 1) {
     <div class="group">
       <span class="section-title">Дульное устройство</span>

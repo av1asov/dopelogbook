@@ -3,7 +3,7 @@ import { Diary, Doc } from '../ballistics/model';
 import { Snapshot } from './db';
 import { DocByKind, DocInput, DiaryRepository, DocKind, RestoreMode } from './repository';
 
-const EMPTY: Diary = { rifles: [], ammo: [], sessions: [] };
+const EMPTY: Diary = { scopes: [], rifles: [], ammo: [], sessions: [] };
 const byCreation = (a: Doc, b: Doc) => a.createdAt.localeCompare(b.createdAt);
 
 /** The diary as signals for the screens. Reads and writes go through the repository. */
@@ -18,6 +18,7 @@ export class DiaryStore {
 
   readonly rifles = computed(() => [...this.diary().rifles].sort(byCreation));
   readonly ammo = computed(() => [...this.diary().ammo].sort(byCreation));
+  readonly scopes = computed(() => [...this.diary().scopes].sort(byCreation));
 
   async init(): Promise<void> {
     void this.requestPersistence();
@@ -64,6 +65,18 @@ export class DiaryStore {
     await this.remove('ammo', id);
   }
 
+  /** Removes the scope and takes it off the rifles. */
+  async removeScope(id: string): Promise<void> {
+    for (const rifle of this.diary().rifles) {
+      if (!rifle.mounts.some((m) => m.scopeId === id)) continue;
+      await this.repository.put('rifle', {
+        ...rifle,
+        mounts: rifle.mounts.filter((m) => m.scopeId !== id),
+      });
+    }
+    await this.remove('scope', id);
+  }
+
   getPhoto(id: string): Promise<Blob | undefined> {
     return this.repository.getPhoto(id);
   }
@@ -81,7 +94,7 @@ export class DiaryStore {
   async closeSession(id: string, reload = true): Promise<void> {
     const session = this.diary().sessions.find((s) => s.id === id);
     if (!session) return;
-    const { open: _open, ...closed } = session;
+    const { open: _open, zeroing: _zeroing, ...closed } = session;
     await this.repository.put('session', closed);
     if (reload) await this.reload();
   }

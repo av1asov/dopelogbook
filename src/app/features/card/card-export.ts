@@ -5,10 +5,14 @@ import {
   fmt,
   fmtAng,
   GroupStats,
+  GroupUnit,
   rdate,
   restName,
   todayIso,
-  Units,
+  unitDigits,
+  unitLabel,
+  unitShort,
+  unitsOf,
 } from '../../core/ballistics';
 
 export interface CardExportOptions {
@@ -17,7 +21,7 @@ export interface CardExportOptions {
   device: string;
   rest: string;
   group: GroupStats | null;
-  groupUnit: Units;
+  groupUnit: GroupUnit;
 }
 
 const FONTS = [
@@ -31,6 +35,10 @@ const FONTS = [
 ];
 const SAMPLE = 'Яя09≈';
 
+/** The scope is named only when the rifle has more than one to tell apart. */
+const scopeName = ({ rifle, scope }: CardData): string | undefined =>
+  rifle.mounts.length > 1 ? scope?.name : undefined;
+
 const hasWind = (data: CardData, options: CardExportOptions): boolean =>
   options.wind && data.points.wind.length > 0;
 
@@ -38,6 +46,7 @@ function subtitle(data: CardData, options: CardExportOptions): (string | false |
   const { rifle, combo, ammo } = data;
   return [
     rifle.caliber,
+    scopeName(data),
     combo?.velocity != null && `${fmt(combo.velocity, 0)} м/с`,
     ammo?.lot && `партия ${ammo.lot}`,
     options.device !== '*' && devName(options.device),
@@ -46,13 +55,14 @@ function subtitle(data: CardData, options: CardExportOptions): (string | false |
 }
 
 export function cardText(data: CardData, options: CardExportOptions): string {
-  const { rifle, ammo, points, rows } = data;
+  const { rifle, scope, ammo, points, rows } = data;
   const zero = points.zero;
+  const digits = unitDigits(scope);
   const wind = hasWind(data, options);
   const lines = [
     `${rifle.name} — ${ammoName(ammo)}`,
     subtitle(data, options).filter(Boolean).join(', '),
-    `Ноль ${zero ? zero.dist : '—'} м${zero && !zero.derived ? ` от ${rdate(zero.date)}` : ''}, ${rifle.units}`,
+    `Ноль ${zero ? zero.dist : '—'} м${zero && !zero.derived ? ` от ${rdate(zero.date)}` : ''}, ${unitLabel(unitsOf(scope))}`,
   ];
   if (options.group) {
     const { avg, best, n } = options.group;
@@ -63,7 +73,7 @@ export function cardText(data: CardData, options: CardExportOptions): string {
   for (const row of rows) {
     const cells = [
       String(row.d),
-      `${row.e.exact ? '' : '≈'}${fmt(row.e.v)}`,
+      `${row.e.exact ? '' : '≈'}${fmt(row.e.v, digits)}`,
       String(row.clicks ?? '—'),
     ];
     if (wind) cells.push(row.w ? fmt(row.w.v, 2) : '—');
@@ -74,7 +84,8 @@ export function cardText(data: CardData, options: CardExportOptions): string {
 
 export function cardFileName(data: CardData, options: CardExportOptions): string {
   const [w, h] = options.size === 'strip' ? [4, 12] : [10, 7];
-  const name = `DOPE ${data.rifle.name} ${ammoName(data.ammo)} ${w}x${h}см.png`;
+  const scope = scopeName(data);
+  const name = `DOPE ${data.rifle.name} ${ammoName(data.ammo)}${scope ? ` ${scope}` : ''} ${w}x${h}см.png`;
   return name.replace(/[\\/:*?"<>|]/g, '_');
 }
 
@@ -87,9 +98,10 @@ export async function renderCardPng(data: CardData, options: CardExportOptions):
     /* fall back to whatever fonts are available */
   }
 
-  const { rifle, ammo, combo, points, rows } = data;
+  const { rifle, scope, ammo, combo, points, rows } = data;
   const strip = options.size === 'strip';
-  const units = rifle.units;
+  const units = unitsOf(scope);
+  const digits = unitDigits(scope);
   const wind = hasWind(data, options);
   const dotsPerCm = 300 / 2.54;
   const W = Math.round((strip ? 4 : 10) * dotsPerCm);
@@ -132,11 +144,12 @@ export async function renderCardPng(data: CardData, options: CardExportOptions):
   g.font = `500 ${Math.round(headH * 0.17)}px "JetBrains Mono", monospace`;
   const details = [
     rifle.caliber,
+    scopeName(data),
     combo?.velocity != null && `${fmt(combo.velocity, 0)} м/с`,
     options.device !== '*' && devName(options.device),
     options.rest !== '*' && restName(options.rest),
     `ноль ${points.zero ? points.zero.dist : '—'} м`,
-    units,
+    unitShort(units),
   ];
   g.fillText(fit(details.filter(Boolean).join(' · ')), pad, pad + headH * 0.64);
   g.fillRect(pad, pad + headH - 6, W - pad * 2, 5);
@@ -144,13 +157,13 @@ export async function renderCardPng(data: CardData, options: CardExportOptions):
   const columns: [string, number][] = wind
     ? [
         ['м', 0.12],
-        [`Верт ${units}`, 0.45],
+        [`Верт ${unitShort(units)}`, 0.45],
         ['Щелч', 0.68],
         ['Ветер 1м/с', 0.98],
       ]
     : [
         ['м', 0.12],
-        [`Верт ${units}`, 0.6],
+        [`Верт ${unitShort(units)}`, 0.6],
         ['Щелч', 0.95],
       ];
   const x0 = pad;
@@ -178,7 +191,11 @@ export async function renderCardPng(data: CardData, options: CardExportOptions):
     g.textAlign = 'right';
     g.font = `${row.e.exact ? '700' : 'italic 400'} ${fontSize}px "JetBrains Mono", monospace`;
     g.fillStyle = row.e.exact ? '#000' : '#555';
-    g.fillText(`${row.e.exact ? '' : '≈'}${fmt(row.e.v)}`, x0 + width * columns[1][1], textY);
+    g.fillText(
+      `${row.e.exact ? '' : '≈'}${fmt(row.e.v, digits)}`,
+      x0 + width * columns[1][1],
+      textY,
+    );
     g.fillText(String(row.clicks ?? '—'), x0 + width * columns[2][1], textY);
     if (wind) {
       g.font = `${row.w?.exact ? '400' : 'italic 400'} ${fontSize}px "JetBrains Mono", monospace`;

@@ -7,15 +7,17 @@ import {
   fmt,
   fmtSigned,
   groupStats,
-  MOA_PER_MIL,
-  numText,
+  mainScope,
+  MOA_PER_MRAD,
+  mountsOf,
   offsetAtZero,
   plural,
-  Rifle,
   sessionRounds,
   sessionsOf,
-  shortDate,
-  zeroInfo,
+  toUnits,
+  unitDigits,
+  unitsOf,
+  zeroText,
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
@@ -37,23 +39,27 @@ export class RiflesPage {
     return this.store.rifles().map((rifle) => {
       const sessions = sessionsOf(diary, rifle.id);
       const n = sessions.length;
+      const main = mainScope(diary, rifle);
+      const atZero = (ammoId: string): string => {
+        const value = main ? offsetAtZero(diary, rifle.id, main.id, ammoId) : null;
+        return fmtSigned(value == null ? null : toUnits(value, unitsOf(main)), unitDigits(main));
+      };
       return {
         rifle,
-        zero: this.zeroParts(rifle),
-        scope: [
-          rifle.scope,
-          `${rifle.units}${rifle.click != null ? `, щелчок ${numText(rifle.click)}` : ''}`,
-        ]
-          .filter(Boolean)
-          .join(' · '),
+        scopes: mountsOf(diary, rifle).map(({ mount, scope }) => ({
+          id: scope.id,
+          name: scope.name,
+          mounted: mount.mounted,
+          zero: zeroText(diary, rifle.id, scope.id),
+        })),
         combos: combosOf(diary, rifle).map((combo) => {
           const group = groupStats(diary, rifle.id, combo.ammoId, true);
-          const value = group && (unit === 'MOA' ? group.avg * MOA_PER_MIL : group.avg);
+          const value = group && (unit === 'MOA' ? group.avg * MOA_PER_MRAD : group.avg);
           return {
             ammoId: combo.ammoId,
             name: ammoName(ammoById(diary, combo.ammoId)),
             velocity: combo.velocity != null ? fmt(combo.velocity, 0) : '—',
-            atZero: fmtSigned(offsetAtZero(diary, rifle.id, combo.ammoId)),
+            atZero: atZero(combo.ammoId),
             group: value == null ? '—' : fmt(value, 2),
           };
         }),
@@ -62,13 +68,4 @@ export class RiflesPage {
       };
     });
   });
-
-  private zeroParts(rifle: Rifle): { dist: string; rest: string } | null {
-    const diary = this.store.diary();
-    const zero = zeroInfo(diary, rifle.id);
-    if (!zero) return null;
-    if (zero.derived) return { dist: `${zero.dist} м`, rest: 'по журналу' };
-    const ammo = ammoName(ammoById(diary, zero.ammoId));
-    return { dist: `${zero.dist} м`, rest: `под ${ammo} · ${shortDate(zero.date)}` };
-  }
 }

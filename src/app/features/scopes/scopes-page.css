@@ -1,0 +1,55 @@
+.add {
+  min-height: 44px;
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.type {
+  flex: none;
+  padding: 0 6px;
+  border: 1.5px solid var(--ink-2);
+  border-radius: 3px;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.type.thermal {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.arrow {
+  font-size: 18px;
+}
+
+.specs {
+  font-size: 14px;
+}
+
+.rifles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+}

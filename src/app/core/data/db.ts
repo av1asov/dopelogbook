@@ -1,5 +1,6 @@
 import Dexie, { Table } from 'dexie';
-import { Ammo, Doc, Rifle, Session } from '../ballistics/model';
+import { Ammo, Doc, Rifle, Scope, Session } from '../ballistics/model';
+import { migrateToScopes, RifleV2, SessionV2 } from './scope-migration';
 
 export interface StoredPhoto extends Doc {
   blob: Blob;
@@ -12,6 +13,7 @@ export interface Setting {
 
 /** Everything a backup holds, soft-deleted documents included. */
 export interface Snapshot {
+  scopes: Scope[];
   rifles: Rifle[];
   ammo: Ammo[];
   sessions: Session[];
@@ -19,6 +21,7 @@ export interface Snapshot {
 }
 
 export class DiaryDb extends Dexie {
+  declare scopes: Table<Scope, string>;
   declare rifles: Table<Rifle, string>;
   declare ammo: Table<Ammo, string>;
   declare sessions: Table<Session, string>;
@@ -34,5 +37,15 @@ export class DiaryDb extends Dexie {
       photos: 'id',
       settings: 'key',
     });
+    this.version(2)
+      .stores({ scopes: 'id' })
+      .upgrade(async (tx) => {
+        const rifles = await tx.table<RifleV2, string>('rifles').toArray();
+        const sessions = await tx.table<SessionV2, string>('sessions').toArray();
+        const migrated = migrateToScopes(rifles, sessions);
+        await tx.table('scopes').bulkPut(migrated.scopes);
+        await tx.table('rifles').bulkPut(migrated.rifles);
+        await tx.table('sessions').bulkPut(migrated.sessions);
+      });
   }
 }

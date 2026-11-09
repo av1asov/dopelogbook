@@ -1,7 +1,10 @@
-import { ammoById, comboOf, combosOf, rifleById, seriesFor, sessionsOf } from './diary';
-import { fmtSigned, rdate } from './format';
-import { Ammo, Combo, Diary, Rifle, Session, Units } from './model';
-import { elevEff, seriesStatus, toUnits } from './series';
+import { ammoById, comboOf, combosOf, scopeById, seriesFor, sessionsOf } from './diary';
+import { fmtSigned, rdate, shortDate } from './format';
+import { Ammo, Combo, Diary, Rifle, Scope, ScopeUnits, Session, ZeroEvent } from './model';
+import { ammoName, elevEff, seriesMatches, seriesStatus, toUnits, unitLabel } from './series';
+
+/** A correction this far from the card or from zero, in mrad, is worth a warning. */
+export const ZERO_TOLERANCE = 0.2;
 
 export interface ZeroInfo {
   dist: number;
@@ -9,8 +12,12 @@ export interface ZeroInfo {
   date?: string;
   ammoId?: string;
   sessionId?: string;
+  /** Series of `sessionId` up to this index were fired before the zero. */
+  afterSi?: number;
+  createdAt?: string;
 }
 
+/** Values are mrad. */
 export interface DopePoint {
   d: number;
   v: number;
@@ -18,6 +25,7 @@ export interface DopePoint {
   adj: boolean;
 }
 
+/** Values are mrad per 1 m/s. */
 export interface WindPoint {
   d: number;
   v: number;
@@ -46,6 +54,7 @@ export interface CardOptions {
   rest?: string;
 }
 
+/** `e` and `w` are in the units of the card's scope. */
 export interface CardRow {
   d: number;
   e: Interpolated;
@@ -55,6 +64,7 @@ export interface CardRow {
 
 export interface CardData {
   rifle: Rifle;
+  scope: Scope | null;
   ammo: Ammo | null;
   combo: Combo | null;
   points: DopePoints;
@@ -66,26 +76,39 @@ export interface CardNote {
   text: string;
 }
 
+function lastZeroEvent(s: Session, scopeId: string): ZeroEvent | null {
+  let last: ZeroEvent | null = null;
+  for (const event of s.zeroEvents ?? []) {
+    if (event.scopeId !== scopeId || !(event.dist > 0)) continue;
+    if (!last || event.afterSi >= last.afterSi) last = event;
+  }
+  return last;
+}
+
 /**
- * The latest session marked as a re-zero; without one, the distance where the
+ * The latest zero mark of this rifle and scope; without one, the distance where the
  * elevation was most often 0.
  */
-export function zeroInfo(d: Diary, rifleId: string): ZeroInfo | null {
+export function zeroInfo(d: Diary, rifleId: string, scopeId: string): ZeroInfo | null {
   const sessions = sessionsOf(d, rifleId);
-  const marked = sessions.find((s) => s.rezero && s.rezero.dist > 0);
-  if (marked?.rezero) {
-    return {
-      dist: marked.rezero.dist,
-      date: marked.date || '',
-      ammoId: marked.rezero.ammoId || marked.series[0]?.ammoId,
-      sessionId: marked.id,
-      derived: false,
-    };
+  for (const s of sessions) {
+    const event = lastZeroEvent(s, scopeId);
+    if (event) {
+      return {
+        dist: event.dist,
+        date: s.date || '',
+        ammoId: event.ammoId,
+        sessionId: s.id,
+        afterSi: event.afterSi,
+        createdAt: s.createdAt,
+        derived: false,
+      };
+    }
   }
   const counts = new Map<number, number>();
   for (const s of sessions) {
     for (const x of s.series) {
-      if (seriesStatus(x).use && (x.dist ?? 0) > 0 && x.elev === 0) {
+      if (x.scopeId === scopeId && seriesStatus(x).use && (x.dist ?? 0) > 0 && x.elev === 0) {
         counts.set(x.dist as number, (counts.get(x.dist as number) ?? 0) + 1);
       }
     }
@@ -94,33 +117,52 @@ export function zeroInfo(d: Diary, rifleId: string): ZeroInfo | null {
   return { dist: [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0], derived: true };
 }
 
-export const afterZero = (s: Session, zero: ZeroInfo | null): boolean =>
-  !zero || zero.derived || (s.date || '') >= (zero.date as string);
+/** «ноль 100 м под Igla Shakal 160 · 09.11» */
+export function zeroText(d: Diary, rifleId: string, scopeId: string, withDate = true): string {
+  const zero = zeroInfo(d, rifleId, scopeId);
+  if (!zero) return 'ноль не отмечен';
+  if (zero.derived) return `ноль ${zero.dist} м, по журналу`;
+  const ammo = zero.ammoId ? ` под ${ammoName(ammoById(d, zero.ammoId))}` : '';
+  return `ноль ${zero.dist} м${ammo}${withDate ? ` · ${shortDate(zero.date)}` : ''}`;
+}
+
+/** Whether series `si` of this session was fired after the zero was set. */
+export function afterZero(s: Session, si: number, zero: ZeroInfo | null): boolean {
+  if (!zero || zero.derived) return true;
+  if (s.id === zero.sessionId) return si > (zero.afterSi as number);
+  const byDate = (s.date || '').localeCompare(zero.date as string);
+  return (byDate || s.createdAt.localeCompare(zero.createdAt as string)) > 0;
+}
 
 /** For each distance the latest usable series wins, so sessions are read oldest first. */
 export function dopePoints(
   d: Diary,
   rifleId: string,
+  scopeId: string,
   ammoId: string | null | undefined,
   device = '*',
   rest = '*',
 ): DopePoints {
-  const units = rifleById(d, rifleId)?.units ?? 'MIL';
-  const zero = zeroInfo(d, rifleId);
-  const all = sessionsOf(d, rifleId, ammoId).filter(
-    (s) => seriesFor(s, ammoId, device, rest).length,
-  );
-  const current = all.filter((s) => afterZero(s, zero)).reverse();
+  const zero = zeroInfo(d, rifleId, scopeId);
+  const normalSeries = (s: Session) =>
+    s.series.flatMap((x, si) =>
+      x.kind === 'normal' && seriesMatches(x, ammoId, device, rest, scopeId) ? [{ x, si }] : [],
+    );
   const elev = new Map<number, Omit<DopePoint, 'd'>>();
   const wind = new Map<number, Omit<WindPoint, 'd'>>();
   const used = new Set<string>();
   const temps: number[] = [];
-  for (const s of current) {
-    for (const x of seriesFor(s, ammoId, device, rest)) {
+  let before = 0;
+  for (const s of sessionsOf(d, rifleId, ammoId).reverse()) {
+    const entries = normalSeries(s);
+    if (!entries.length) continue;
+    const current = entries.filter(({ si }) => afterZero(s, si, zero));
+    if (!current.length) before++;
+    for (const { x } of current) {
       if (!seriesStatus(x).use) continue;
       const dist = x.dist as number;
       elev.set(dist, {
-        v: elevEff(x, units) as number,
+        v: elevEff(x) as number,
         date: s.date,
         adj: x.offUp != null,
       });
@@ -133,14 +175,7 @@ export function dopePoints(
   }
   const sorted = <T>(m: Map<number, T>) =>
     [...m.entries()].map(([k, v]) => ({ d: k, ...v })).sort((a, b) => a.d - b.d);
-  return {
-    elev: sorted(elev),
-    wind: sorted(wind),
-    sessions: used.size,
-    temps,
-    before: all.length - current.length,
-    zero,
-  };
+  return { elev: sorted(elev), wind: sorted(wind), sessions: used.size, temps, before, zero };
 }
 
 /** Exact point or linear interpolation; null outside the measured range. */
@@ -160,10 +195,22 @@ export function interp(
   return null;
 }
 
+/** The requested scope if the rifle has it, else the mounted one, else any. */
+export function cardScopeId(
+  d: Diary,
+  rifle: Rifle,
+  current: string | null | undefined,
+): string | null {
+  const live = rifle.mounts.filter((m) => scopeById(d, m.scopeId));
+  if (current && live.some((m) => m.scopeId === current)) return current;
+  return (live.find((m) => m.mounted) ?? live[0])?.scopeId ?? null;
+}
+
 /** The requested ammo if the rifle has it, else the first one with data. */
 export function cardAmmoId(
   d: Diary,
   rifle: Rifle,
+  scopeId: string,
   current: string | null | undefined,
   device = '*',
   rest = '*',
@@ -171,22 +218,28 @@ export function cardAmmoId(
   const combos = combosOf(d, rifle);
   if (!combos.length) return null;
   if (current && combos.some((c) => c.ammoId === current)) return current;
-  const withData = combos.find((c) => dopePoints(d, rifle.id, c.ammoId, device, rest).elev.length);
+  const withData = combos.find(
+    (c) => dopePoints(d, rifle.id, scopeId, c.ammoId, device, rest).elev.length,
+  );
   return (withData ?? combos[0]).ammoId;
 }
 
 export function cardRows(
   d: Diary,
   rifle: Rifle,
+  scopeId: string,
   ammoId: string | null | undefined,
   options: CardOptions,
 ): CardData {
   const { step, device = '*', rest = '*' } = options;
+  const scope = scopeById(d, scopeId);
   const ammo = ammoById(d, ammoId);
   const combo = comboOf(d, rifle, ammoId);
-  const points = dopePoints(d, rifle.id, ammoId, device, rest);
-  if (!ammo || !points.elev.length) return { rifle, ammo, combo, points, rows: [] };
+  const points = dopePoints(d, rifle.id, scopeId, ammoId, device, rest);
+  if (!ammo || !points.elev.length) return { rifle, scope, ammo, combo, points, rows: [] };
 
+  const units = scope?.units ?? 'MRAD';
+  const inUnits = (p: Interpolated): Interpolated => ({ ...p, v: toUnits(p.v, units) });
   const from = options.from ?? points.elev[0].d;
   const to = options.to ?? points.elev[points.elev.length - 1].d;
   const dists = new Set<number>();
@@ -196,54 +249,71 @@ export function cardRows(
   const rows = [...dists]
     .sort((a, b) => a - b)
     .flatMap((dist): CardRow[] => {
-      const e = interp(points.elev, dist);
-      if (!e) return [];
-      const clicks = rifle.click ? Math.round(e.v / rifle.click) : null;
-      return [{ d: dist, e, w: interp(points.wind, dist), clicks }];
+      const found = interp(points.elev, dist);
+      if (!found) return [];
+      const e = inUnits(found);
+      const w = interp(points.wind, dist);
+      const clicks = scope?.click ? Math.round(e.v / scope.click) : null;
+      return [{ d: dist, e, w: w && inUnits(w), clicks }];
     });
-  return { rifle, ammo, combo, points, rows };
+  return { rifle, scope, ammo, combo, points, rows };
 }
 
-export function offsetAtZero(d: Diary, rifleId: string, ammoId: string): number | null {
-  const zero = zeroInfo(d, rifleId);
+/** The ammo's correction at the distance this scope is zeroed at, mrad. */
+export function offsetAtZero(
+  d: Diary,
+  rifleId: string,
+  scopeId: string,
+  ammoId: string,
+): number | null {
+  const zero = zeroInfo(d, rifleId, scopeId);
   if (!zero) return null;
-  return dopePoints(d, rifleId, ammoId).elev.find((p) => p.d === zero.dist)?.v ?? null;
+  return dopePoints(d, rifleId, scopeId, ammoId).elev.find((p) => p.d === zero.dist)?.v ?? null;
 }
 
 const usedValues = (
   d: Diary,
   rifleId: string,
   ammoId: string | null | undefined,
+  scopeId: string | null | undefined,
   pick: (x: { device?: string; rest?: string }) => string | undefined,
 ): string[] => [
   ...new Set(
     sessionsOf(d, rifleId, ammoId)
-      .flatMap((s) => seriesFor(s, ammoId))
+      .flatMap((s) => seriesFor(s, ammoId, '*', '*', scopeId))
       .filter((x) => seriesStatus(x).use)
       .map((x) => pick(x) || ''),
   ),
 ];
 
-export const devicesUsed = (d: Diary, rifleId: string, ammoId?: string | null): string[] =>
-  usedValues(d, rifleId, ammoId, (x) => x.device);
+export const devicesUsed = (
+  d: Diary,
+  rifleId: string,
+  ammoId?: string | null,
+  scopeId?: string | null,
+): string[] => usedValues(d, rifleId, ammoId, scopeId, (x) => x.device);
 
-export const restsUsed = (d: Diary, rifleId: string, ammoId?: string | null): string[] =>
-  usedValues(d, rifleId, ammoId, (x) => x.rest);
+export const restsUsed = (
+  d: Diary,
+  rifleId: string,
+  ammoId?: string | null,
+  scopeId?: string | null,
+): string[] => usedValues(d, rifleId, ammoId, scopeId, (x) => x.rest);
 
-/** Average vertical offset per rest (2+ series each), when rests differ noticeably. */
+/** Average vertical offset per rest (2+ series each) in mrad, when rests differ noticeably. */
 export function restShift(
   d: Diary,
   rifleId: string,
+  scopeId: string,
   ammoId: string,
-  units: Units,
   device = '*',
 ): { rest: string; avg: number }[] | null {
   const byRest = new Map<string, number[]>();
   for (const s of sessionsOf(d, rifleId, ammoId)) {
-    for (const x of seriesFor(s, ammoId, device)) {
+    for (const x of seriesFor(s, ammoId, device, '*', scopeId)) {
       if (!seriesStatus(x).use || x.offUp == null || !((x.dist ?? 0) > 0)) continue;
       const key = x.rest || '';
-      byRest.set(key, [...(byRest.get(key) ?? []), toUnits(x.offUp / (x.dist as number), units)]);
+      byRest.set(key, [...(byRest.get(key) ?? []), x.offUp / (x.dist as number)]);
     }
   }
   const rows = [...byRest.entries()]
@@ -254,16 +324,16 @@ export function restShift(
     }));
   if (rows.length < 2) return null;
   const spread = Math.max(...rows.map((r) => r.avg)) - Math.min(...rows.map((r) => r.avg));
-  return spread >= (units === 'MOA' ? 0.7 : 0.2) ? rows : null;
+  return spread >= ZERO_TOLERANCE ? rows : null;
 }
 
-export function zeroNotes(ammo: Ammo | null, points: DopePoints, units: Units): CardNote[] {
+export function zeroNotes(ammo: Ammo | null, points: DopePoints, units: ScopeUnits): CardNote[] {
   const zero = points.zero;
   const notes: CardNote[] = [];
   if (!zero) {
     notes.push({
       kind: 'warn',
-      text: 'Пристрелка не отмечена. Отметьте в записи стрельбы день, когда выставляли ноль.',
+      text: 'Пристрелка не отмечена. Отметьте в записи стрельбы, когда выставляли ноль.',
     });
   } else if (!zero.derived && points.before) {
     notes.push({
@@ -273,10 +343,10 @@ export function zeroNotes(ammo: Ammo | null, points: DopePoints, units: Units): 
   }
   if (zero && !zero.derived && ammo?.id === zero.ammoId) {
     const off = points.elev.find((p) => p.d === zero.dist);
-    if (off && Math.abs(off.v) >= (units === 'MOA' ? 0.75 : 0.2)) {
+    if (off && Math.abs(off.v) >= ZERO_TOLERANCE) {
       notes.push({
         kind: 'warn',
-        text: `Патрону, под который пристрелян прицел, на ${zero.dist} м потребовалась поправка ${fmtSigned(off.v)} ${units}. Похоже, ноль сместился: проверьте крепление и при необходимости перепристреляйте.`,
+        text: `Патрону, под который пристрелян прицел, на ${zero.dist} м потребовалась поправка ${fmtSigned(toUnits(off.v, units))} ${unitLabel(units)}. Похоже, ноль сместился: проверьте крепление и при необходимости перепристреляйте.`,
       });
     }
   }

@@ -10,6 +10,7 @@ import {
   groupStats,
   GroupStats,
   isStable,
+  mainScope,
   offsetAtZero,
   restShift,
   restsUsed,
@@ -35,10 +36,12 @@ export function goldenSnapshot(diary: Diary, ids: ExampleIds): Record<string, un
   const { rifle: rifleId, hand, factory } = ids;
   const rifle = diary.rifles.find((r) => r.id === rifleId);
   if (!rifle) throw new Error('example rifle not found');
+  const scopeId = mainScope(diary, rifle)?.id;
+  if (!scopeId) throw new Error('example scope not found');
   const names: Record<string, string> = { [hand]: 'hand', [factory]: 'factory' };
 
   const card = (ammoId: string, options: Record<string, unknown>) => {
-    const { points, rows } = cardRows(diary, rifle, ammoId, { step: 50, ...options });
+    const { points, rows } = cardRows(diary, rifle, scopeId, ammoId, { step: 50, ...options });
     return {
       sessions: points.sessions,
       temps: points.temps,
@@ -69,7 +72,7 @@ export function goldenSnapshot(diary: Diary, ids: ExampleIds): Record<string, un
     cards[`${name}/range`] = card(ammoId, { from: 150, to: 450 });
   }
 
-  const zero = zeroInfo(diary, rifleId);
+  const zero = zeroInfo(diary, rifleId, scopeId);
   const cold = coldStats(diary, rifleId);
   const groups = (ammoId: string) =>
     groupsOf(diary, rifleId, ammoId).map((g) => ({
@@ -79,7 +82,7 @@ export function goldenSnapshot(diary: Diary, ids: ExampleIds): Record<string, un
       stable: isStable(g.series),
     }));
   const stability = (ammoId: string) =>
-    correctionStability(diary, rifleId, ammoId, 'MIL').map((p) => ({
+    correctionStability(diary, rifleId, scopeId, ammoId).map((p) => ({
       date: p.session.date,
       dist: p.dist,
       v: round(p.value),
@@ -95,8 +98,8 @@ export function goldenSnapshot(diary: Diary, ids: ExampleIds): Record<string, un
     },
     cards,
     offsetAtZero: {
-      hand: offsetAtZero(diary, rifleId, hand),
-      factory: offsetAtZero(diary, rifleId, factory),
+      hand: offsetAtZero(diary, rifleId, scopeId, hand),
+      factory: offsetAtZero(diary, rifleId, scopeId, factory),
     },
     groupStats: {
       all: group(groupStats(diary, rifleId)),
@@ -113,7 +116,7 @@ export function goldenSnapshot(diary: Diary, ids: ExampleIds): Record<string, un
       avg: round(o.avg),
     })),
     cold: cold && { n: cold.n, up: round(cold.up), right: round(cold.right) },
-    restShift: (restShift(diary, rifleId, hand, 'MIL') ?? []).map((o) => ({
+    restShift: (restShift(diary, rifleId, scopeId, hand) ?? []).map((o) => ({
       rest: o.rest,
       avg: round(o.avg),
     })),
@@ -138,7 +141,7 @@ export function goldenSnapshot(diary: Diary, ids: ExampleIds): Record<string, un
           dist: x.dist,
           use: status.use,
           why: status.why ?? null,
-          eff: round(elevEff(x, 'MIL') as number),
+          eff: round(elevEff(x) as number),
         };
       }),
     ),

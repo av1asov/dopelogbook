@@ -11,6 +11,7 @@ import {
   ammoName,
   cardAmmoId,
   cardRows,
+  cardScopeId,
   combosOf,
   devicesUsed,
   devName,
@@ -21,6 +22,10 @@ import {
   numText,
   restName,
   restShift,
+  toUnits,
+  unitDigits,
+  unitLabel,
+  unitsOf,
   zeroNotes,
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
@@ -52,13 +57,21 @@ export class CardPage {
     () => combosOf(this.store.diary(), this.view.rifle()).length > 0,
   );
 
+  private readonly scopeId = computed(() => {
+    const rifle = this.view.rifle();
+    return rifle ? cardScopeId(this.store.diary(), rifle, this.view.scopeId()) : null;
+  });
+
+  protected readonly hasScope = computed(() => this.scopeId() != null);
+
   protected readonly data = computed(() => {
     const rifle = this.view.rifle();
-    if (!rifle) return null;
+    const scopeId = this.scopeId();
+    if (!rifle || !scopeId) return null;
     const diary = this.store.diary();
     const card = this.view.card();
-    const ammoId = cardAmmoId(diary, rifle, this.view.ammoId(), card.device, card.rest);
-    return ammoId ? cardRows(diary, rifle, ammoId, card) : null;
+    const ammoId = cardAmmoId(diary, rifle, scopeId, this.view.ammoId(), card.device, card.rest);
+    return ammoId ? cardRows(diary, rifle, scopeId, ammoId, card) : null;
   });
 
   protected readonly title = computed(() => {
@@ -66,6 +79,7 @@ export class CardPage {
     const card = this.view.card();
     if (!data) return '';
     const parts = [ammoName(data.ammo)];
+    if (data.scope) parts.push(data.scope.name);
     if (card.device !== '*') parts.push(devName(card.device));
     if (card.rest !== '*') parts.push(restName(card.rest) || 'опора не указана');
     return parts.join(' · ');
@@ -74,11 +88,11 @@ export class CardPage {
   protected readonly specs = computed(() => {
     const data = this.data();
     if (!data) return '';
-    const { rifle, points } = data;
+    const { scope, points } = data;
     return [
       points.zero ? `ноль ${points.zero.dist} м` : 'ноль не отмечен',
-      rifle.units,
-      rifle.click != null ? `щелчок ${numText(rifle.click)}` : '',
+      unitLabel(unitsOf(scope)),
+      scope?.click != null ? `щелчок ${numText(scope.click)}` : '',
     ]
       .filter(Boolean)
       .join(' · ');
@@ -89,19 +103,22 @@ export class CardPage {
     return !!data && this.view.card().wind && data.points.wind.length > 0;
   });
 
-  protected readonly rows = computed(() =>
-    (this.data()?.rows ?? []).map((row) => ({
+  protected readonly rows = computed(() => {
+    const data = this.data();
+    const digits = unitDigits(data?.scope);
+    return (data?.rows ?? []).map((row) => ({
       d: row.d,
       exact: row.e.exact,
-      elev: `${row.e.exact ? '' : '≈'}${fmt(row.e.v)}`,
+      elev: `${row.e.exact ? '' : '≈'}${fmt(row.e.v, digits)}`,
       clicks: row.clicks ?? '—',
       wind: row.w ? fmt(row.w.v, 2) : '—',
-    })),
-  );
+    }));
+  });
 
   private readonly group = computed(() => {
     const data = this.data();
-    return data?.ammo ? groupStats(this.store.diary(), data.rifle.id, data.ammo.id) : null;
+    if (!data?.ammo) return null;
+    return groupStats(this.store.diary(), data.rifle.id, data.ammo.id, false, this.scopeId());
   });
 
   protected readonly footnote = computed(() => {
@@ -121,9 +138,11 @@ export class CardPage {
     if (!data?.ammo) return [];
     const diary = this.store.diary();
     const card = this.view.card();
-    const { rifle, ammo, points } = data;
-    const notes = zeroNotes(ammo, points, rifle.units);
-    const devices = devicesUsed(diary, rifle.id, ammo.id);
+    const { rifle, scope, ammo, points } = data;
+    const scopeId = scope?.id ?? '';
+    const units = unitsOf(scope);
+    const notes = zeroNotes(ammo, points, units);
+    const devices = devicesUsed(diary, rifle.id, ammo.id, scopeId);
     if (card.device === '*' && devices.length > 1) {
       notes.unshift({
         kind: 'warn',
@@ -131,14 +150,16 @@ export class CardPage {
       });
     }
     const shift =
-      card.rest === '*' ? restShift(diary, rifle.id, ammo.id, rifle.units, card.device) : null;
+      card.rest === '*' ? restShift(diary, rifle.id, scopeId, ammo.id, card.device) : null;
     if (shift) {
       const list = shift
-        .map((row) => `${restName(row.rest) || 'не указана'} ${fmtSigned(row.avg, 2)}`)
+        .map(
+          (row) => `${restName(row.rest) || 'не указана'} ${fmtSigned(toUnits(row.avg, units), 2)}`,
+        )
         .join(', ');
       notes.unshift({
         kind: 'warn',
-        text: `С разных опор группа ложится по-разному по вертикали: ${list} ${rifle.units}. Выберите опору, иначе поправки смешаются.`,
+        text: `С разных опор группа ложится по-разному по вертикали: ${list} ${unitLabel(units)}. Выберите опору, иначе поправки смешаются.`,
       });
     }
     return notes;

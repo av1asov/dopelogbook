@@ -15,11 +15,12 @@ import {
   ammoName,
   numText,
   parseNum,
-  rdate,
   rifleById,
   Rifle,
+  Scope,
+  scopeById,
   sessionsOf,
-  Units,
+  zeroInfo,
 } from '../../core/ballistics';
 import { compact } from '../../core/data/legacy';
 import { DiaryStore } from '../../core/data/diary-store';
@@ -27,6 +28,11 @@ import { DiaryStore } from '../../core/data/diary-store';
 const text = (value = '') => new FormControl(value, { nonNullable: true });
 
 type ComboForm = FormGroup<{ ammoId: FormControl<string>; velocity: FormControl<string> }>;
+type MountForm = FormGroup<{
+  scopeId: FormControl<string>;
+  sightHeight: FormControl<string>;
+  mounted: FormControl<boolean>;
+}>;
 
 @Component({
   selector: 'app-rifle-edit-page',
@@ -46,11 +52,8 @@ export class RifleEditPage implements OnInit {
     name: text(),
     caliber: text(),
     barrel: text(),
-    scope: text(),
-    units: new FormControl<Units>('MIL', { nonNullable: true }),
-    click: text('0,1'),
-    sightHeight: text(),
     notes: text(),
+    mounts: new FormArray<MountForm>([]),
     combos: new FormArray<ComboForm>([]),
   });
 
@@ -58,6 +61,7 @@ export class RifleEditPage implements OnInit {
   protected readonly addingDevice = signal(false);
   protected readonly newDevice = text();
   protected readonly pickingAmmo = signal(false);
+  protected readonly pickingScope = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly confirmingDelete = signal(false);
 
@@ -68,17 +72,6 @@ export class RifleEditPage implements OnInit {
     return id ? sessionsOf(this.store.diary(), id).length : 0;
   });
 
-  protected readonly zeroHistory = computed(() => {
-    const id = this.id();
-    if (!id) return [];
-    const diary = this.store.diary();
-    return sessionsOf(diary, id).flatMap((s) => {
-      if (!s.rezero || !(s.rezero.dist > 0)) return [];
-      const ammo = ammoName(ammoById(diary, s.rezero.ammoId || s.series[0]?.ammoId));
-      return [{ id: s.id, dist: s.rezero.dist, ammo, date: rdate(s.date) }];
-    });
-  });
-
   ngOnInit(): void {
     const rifle = this.existing();
     if (!rifle) return;
@@ -86,14 +79,68 @@ export class RifleEditPage implements OnInit {
       name: rifle.name,
       caliber: rifle.caliber ?? '',
       barrel: rifle.barrel ?? '',
-      scope: rifle.scope ?? '',
-      units: rifle.units,
-      click: numText(rifle.click),
-      sightHeight: numText(rifle.sightHeight),
       notes: rifle.notes ?? '',
     });
     this.devices.set([...(rifle.devices ?? [])]);
     for (const combo of rifle.combos) this.addCombo(combo.ammoId, numText(combo.velocity));
+    for (const mount of rifle.mounts) {
+      this.pushMount(mount.scopeId, numText(mount.sightHeight), mount.mounted);
+    }
+  }
+
+  protected scopeName(scopeId: string): string {
+    return scopeById(this.store.diary(), scopeId)?.name ?? '—';
+  }
+
+  protected mountStatus(mount: MountForm): string {
+    const zero = this.id()
+      ? zeroInfo(this.store.diary(), this.id() as string, mount.controls.scopeId.value)
+      : null;
+    return [
+      mount.controls.mounted.value ? 'установлен' : 'снят',
+      zero ? `ноль ${zero.dist} м` : 'ноль не отмечен',
+    ].join(' · ');
+  }
+
+  /** A scope that has series on this rifle cannot be taken off the list. */
+  protected scopeSessions(scopeId: string): number {
+    const id = this.id();
+    if (!id) return 0;
+    return sessionsOf(this.store.diary(), id).filter((s) =>
+      s.series.some((x) => x.scopeId === scopeId),
+    ).length;
+  }
+
+  protected freeScopes(): Scope[] {
+    const taken = new Set(this.form.controls.mounts.controls.map((m) => m.controls.scopeId.value));
+    return this.store.scopes().filter((scope) => !taken.has(scope.id));
+  }
+
+  protected addScope(scopeId: string): void {
+    const anyMounted = this.form.controls.mounts.controls.some((m) => m.controls.mounted.value);
+    this.pushMount(scopeId, '', !anyMounted);
+    this.pickingScope.set(false);
+  }
+
+  /** Mounting one scope takes off the one that was there. */
+  protected install(index: number): void {
+    this.form.controls.mounts.controls.forEach((mount, i) =>
+      mount.controls.mounted.setValue(i === index),
+    );
+  }
+
+  protected removeMount(index: number): void {
+    this.form.controls.mounts.removeAt(index);
+  }
+
+  private pushMount(scopeId: string, sightHeight: string, mounted: boolean): void {
+    this.form.controls.mounts.push(
+      new FormGroup({
+        scopeId: text(scopeId),
+        sightHeight: text(sightHeight),
+        mounted: new FormControl(mounted, { nonNullable: true }),
+      }),
+    );
   }
 
   protected ammoLabel(ammoId: string): string {
@@ -150,6 +197,14 @@ export class RifleEditPage implements OnInit {
     if (saved) await this.router.navigate(['/more/ammo/new'], { queryParams: { rifle: saved.id } });
   }
 
+  /** Keeps the rifle, then opens the scope form; the new scope is mounted on return. */
+  protected async createScope(): Promise<void> {
+    const saved = await this.persist();
+    if (saved) {
+      await this.router.navigate(['/more/scopes/new'], { queryParams: { rifle: saved.id } });
+    }
+  }
+
   protected async remove(): Promise<void> {
     const id = this.id();
     if (!id) return;
@@ -173,16 +228,19 @@ export class RifleEditPage implements OnInit {
         name,
         caliber: value.caliber.trim(),
         barrel: value.barrel.trim(),
-        scope: value.scope.trim(),
-        units: value.units,
-        click: parseNum(value.click),
-        sightHeight: parseNum(value.sightHeight),
         notes: value.notes.trim(),
         devices: this.devices(),
         combos: value.combos.map((c) => ({
           ammoId: c.ammoId,
           velocity: parseNum(c.velocity),
         })),
+        mounts: value.mounts.map((m) =>
+          compact({
+            scopeId: m.scopeId,
+            sightHeight: parseNum(m.sightHeight),
+            mounted: m.mounted,
+          }),
+        ),
       }),
     );
   }

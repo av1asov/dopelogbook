@@ -1,4 +1,4 @@
-import { Ammo, Diary, Rifle, Series, Session } from '../model';
+import { Ammo, Diary, Rifle, Scope, Series, Session } from '../model';
 
 const STAMP = '2026-01-01T00:00:00.000Z';
 const meta = (id: string) => ({ id, createdAt: STAMP, updatedAt: STAMP });
@@ -6,14 +6,21 @@ const meta = (id: string) => ({ id, createdAt: STAMP, updatedAt: STAMP });
 export const HAND = 'ammo-hand';
 export const FACTORY = 'ammo-factory';
 export const RIFLE = 'rifle-1';
+export const SCOPE = 'scope-1';
+
+export const scope: Scope = {
+  ...meta(SCOPE),
+  name: 'Пример: оптика',
+  type: 'optic',
+  units: 'MRAD',
+  click: 0.1,
+};
 
 export const rifle: Rifle = {
   ...meta(RIFLE),
   name: 'Пример: болтовка .308',
   caliber: '.308 Win',
-  units: 'MIL',
-  click: 0.1,
-  sightHeight: 45,
+  mounts: [{ scopeId: SCOPE, sightHeight: 45, mounted: true }],
   devices: ['ДТК', 'Глушитель'],
   combos: [
     { ammoId: HAND, velocity: 790 },
@@ -37,6 +44,8 @@ const factory: Ammo = {
 };
 
 const dtk = (x: Partial<Series>): Series => ({
+  kind: 'normal',
+  scopeId: SCOPE,
   ammoId: HAND,
   device: 'ДТК',
   pos: 'prone',
@@ -45,6 +54,8 @@ const dtk = (x: Partial<Series>): Series => ({
 });
 
 const suppressed = (x: Partial<Series>): Series => ({
+  kind: 'normal',
+  scopeId: SCOPE,
   ammoId: FACTORY,
   device: 'Глушитель',
   pos: 'sit',
@@ -60,7 +71,7 @@ const sessions: Session[] = [
     temp: 18,
     pressure: 748,
     extraRounds: 13,
-    rezero: { dist: 100, ammoId: HAND },
+    zeroEvents: [{ afterSi: -1, dist: 100, ammoId: HAND, scopeId: SCOPE }],
     series: [
       dtk({ dist: 100, elev: 0, hits: 5, shots: 5, group: 24 }),
       dtk({ dist: 200, elev: 0.9, windSpeed: 3, windCorr: 0.2, hits: 4, shots: 5 }),
@@ -153,4 +164,9 @@ const sessions: Session[] = [
   },
 ];
 
-export const exampleDiary: Diary = { rifles: [rifle], ammo: [hand, factory], sessions };
+export const exampleDiary: Diary = {
+  scopes: [scope],
+  rifles: [rifle],
+  ammo: [hand, factory],
+  sessions,
+};

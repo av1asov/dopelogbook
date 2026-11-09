@@ -8,6 +8,28 @@
   </div>
 
   @if (view.rifle(); as rifle) {
+    @if (scopeChips().length > 1) {
+      <div class="chips">
+        <button
+          type="button"
+          class="chip"
+          [attr.aria-pressed]="!view.statsScopeId()"
+          (click)="view.statsScopeId.set(null)"
+        >
+          Все прицелы
+        </button>
+        @for (scope of scopeChips(); track scope.id) {
+          <button
+            type="button"
+            class="chip"
+            [attr.aria-pressed]="view.statsScopeId() === scope.id"
+            (click)="view.statsScopeId.set(scope.id)"
+          >
+            {{ scope.name }}
+          </button>
+        }
+      </div>
+    }
     @if (ammoChips().length) {
       <section class="card">
         <button type="button" class="report" (click)="toggle('progress')">

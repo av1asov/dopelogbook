@@ -1,4 +1,4 @@
-import { ColdShot, PhotoRef } from './model';
+import { ColdShot, PhotoRef, Series, Session, ZeroEvent } from './model';
 
 /** Keeps photo links and the cold shot pointing at the right series after one is removed. */
 export function afterSeriesRemoved(
@@ -15,5 +15,27 @@ export function afterSeriesRemoved(
   return {
     photos: shifted,
     coldShot: coldShot.si > index ? { ...coldShot, si: coldShot.si - 1 } : coldShot,
+  };
+}
+
+/** Keeps zero marks after the same series when one is removed. */
+export function zeroEventsAfterRemoval(events: readonly ZeroEvent[], index: number): ZeroEvent[] {
+  return events.map((event) =>
+    event.afterSi >= index ? { ...event, afterSi: event.afterSi - 1 } : { ...event },
+  );
+}
+
+/**
+ * Ends zeroing: `series` is the last zeroing series, or null when all of them are already
+ * recorded. The zero counts from the next series on.
+ */
+export function finishZeroing(session: Session, series: Series | null): Session {
+  const { zeroing: plan, ...rest } = session;
+  const list = series ? [...session.series, series] : session.series;
+  if (!plan) return { ...rest, series: list };
+  return {
+    ...rest,
+    series: list,
+    zeroEvents: [...(session.zeroEvents ?? []), { afterSi: list.length - 1, ...plan }],
   };
 }
