@@ -159,6 +159,8 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   readonly photoId = input.required<string>();
   readonly context = input.required<MeasureContext>();
   readonly saved = input<PhotoMarks | undefined>(undefined, { alias: 'marks' });
+  /** A new shot to mark up instead of the stored one, which it replaces only on apply. */
+  readonly shot = input<Blob>();
 
   readonly applied = output<MeasureApplied>();
   readonly closed = output<void>();
@@ -505,7 +507,8 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   });
 
   async ngOnInit(): Promise<void> {
-    this.blob = this.source = this.stored = await this.store.getPhoto(this.photoId());
+    this.stored = await this.store.getPhoto(this.photoId());
+    this.blob = this.source = this.shot() ?? this.stored;
     if (!this.blob) {
       this.notice.set('Фото не найдено');
       return;

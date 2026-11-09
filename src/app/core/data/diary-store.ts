@@ -1,5 +1,5 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { Diary, Doc, TargetTemplate } from '../ballistics/model';
+import { Diary, Doc, Session, TargetTemplate } from '../ballistics/model';
 import { Snapshot } from './db';
 import { DocByKind, DocInput, DiaryRepository, DocKind, RestoreMode } from './repository';
 
@@ -120,6 +120,16 @@ export class DiaryStore {
 
   removePhoto(id: string): Promise<void> {
     return this.repository.deletePhoto(id);
+  }
+
+  async detachPhoto(session: Session, photoId: string): Promise<void> {
+    await this.repository.detachPhoto(session, photoId);
+    await this.reload();
+  }
+
+  async reattachPhoto(session: Session, photoId: string): Promise<void> {
+    await this.repository.reattachPhoto(session, photoId);
+    await this.reload();
   }
 
   snapshot(): Promise<Snapshot> {

@@ -15,8 +15,11 @@ import {
   defaultSeries,
   fitLayout,
   matchesLayout,
+  measuredSeries,
   measureTarget,
+  numberRanges,
   offsetShort,
+  photoSeries,
   photosWithTemplate,
   spread,
   templateText,
@@ -25,6 +28,7 @@ import {
   turnPlane,
   turnPoint,
   withMeasurement,
+  withoutPhoto,
 } from './measure';
 import { assessQuality, issueText, MEASURE_LIMITS, TEMPLATE_LIMITS } from './quality';
 import { snapToLine } from './snap';
@@ -297,6 +301,65 @@ describe('series for targets', () => {
 
   it('runs out', () => {
     expect(defaultSeries(2, [option(0)], 0)).toEqual([0, null]);
+  });
+});
+
+describe('deleting a photo from a session', () => {
+  const marks = (...targets: { n: number; si?: number }[]) => ({
+    scale: { ...manualScale, source: 'sheet' as const },
+    targets: targets.map((t) => ({ ...t, holes: [] })),
+  });
+  const numbers = { group: 32, offUp: 4, offRight: 3 };
+  const series = (extra = {}) => ({ kind: 'normal', scopeId: 'c', ammoId: 'a', ...extra });
+  const session = {
+    id: 's',
+    createdAt: '',
+    updatedAt: '',
+    rifleId: 'r',
+    date: '2026-11-09',
+    series: [series(numbers), series(numbers), series(numbers)],
+    photos: [{ id: 'p' }, { id: 'other' }],
+  } as Session;
+
+  it('takes the photo out and keeps the numbers by default choice', () => {
+    const result = withoutPhoto(session, { id: 'p', si: 1, marks: marks({ n: 1 }) }, true);
+    expect(result.photos).toEqual([{ id: 'other' }]);
+    expect(result.series[1]).toMatchObject(numbers);
+  });
+
+  it('clears only the series the photo measured', () => {
+    const result = withoutPhoto(session, { id: 'p', si: 1, marks: marks({ n: 1 }) }, false);
+    expect(result.series[0]).toMatchObject(numbers);
+    expect(result.series[1]).toEqual(series());
+    expect(result.series[2]).toMatchObject(numbers);
+  });
+
+  it('clears every series of a sheet', () => {
+    const sheet = { id: 'p', marks: marks({ n: 1, si: 0 }, { n: 2 }, { n: 3, si: 2 }) };
+    const result = withoutPhoto(session, sheet, false);
+    expect(result.series[0]).toEqual(series());
+    expect(result.series[1]).toMatchObject(numbers);
+    expect(result.series[2]).toEqual(series());
+  });
+
+  it('leaves hand-entered numbers alone when the photo has no marks', () => {
+    expect(withoutPhoto(session, { id: 'p', si: 1 }, false).series[1]).toMatchObject(numbers);
+  });
+
+  it('finds the series of a photo and which of them it measured', () => {
+    expect(photoSeries({ id: 'p', si: 2 })).toEqual([2]);
+    expect(measuredSeries({ id: 'p', si: 2 })).toEqual([]);
+    const sheet = { id: 'p', marks: marks({ n: 1, si: 4 }, { n: 2, si: 3 }, { n: 3 }) };
+    expect(photoSeries(sheet)).toEqual([3, 4]);
+    expect(measuredSeries(sheet)).toEqual([3, 4]);
+    expect(photoSeries({ id: 'p', si: 1, marks: marks({ n: 1, si: 1 }) })).toEqual([1]);
+  });
+
+  it('writes series numbers as ranges', () => {
+    expect(numberRanges([3])).toBe('3');
+    expect(numberRanges([5, 3, 4])).toBe('3–5');
+    expect(numberRanges([1, 3])).toBe('1, 3');
+    expect(numberRanges([1, 3, 4, 5, 8])).toBe('1, 3–5, 8');
   });
 });
 

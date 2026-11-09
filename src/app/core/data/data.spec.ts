@@ -391,6 +391,26 @@ describe('repository', () => {
     expect(await repository.storedPhotoCount()).toBe(0);
   });
 
+  it('detaches a photo from its session and brings it back', async () => {
+    const photoId = await repository.putPhoto(new Blob(['x'], { type: 'image/jpeg' }));
+    const before = await repository.put('session', {
+      ...newSession,
+      photos: [{ id: photoId, si: 0 }],
+    });
+
+    await repository.detachPhoto({ ...before, photos: [] }, photoId);
+    expect((await repository.get('session', before.id))?.photos).toEqual([]);
+    expect(await repository.getPhoto(photoId)).toBeUndefined();
+    const { photos } = await repository.snapshot();
+    expect(photos[0].deletedAt).toBeTruthy();
+    expect(photos[0].blob).toBeTruthy();
+
+    await repository.reattachPhoto(before, photoId);
+    expect((await repository.get('session', before.id))?.photos).toEqual(before.photos);
+    expect(await repository.getPhoto(photoId)).toBeTruthy();
+    expect('deletedAt' in (await repository.snapshot()).photos[0]).toBe(false);
+  });
+
   it('stores settings', async () => {
     await repository.setSetting('unit', 'MOA');
     expect(await repository.getSetting('unit')).toBe('MOA');
