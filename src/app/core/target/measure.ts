@@ -187,6 +187,45 @@ export function withMeasurement(
 export const showsSeries = (photo: PhotoRef, si: number): boolean =>
   photo.si === si || (photo.marks?.targets.some((t) => t.si === si) ?? false);
 
+const uniqueSorted = (values: readonly number[]): number[] =>
+  [...new Set(values)].sort((a, b) => a - b);
+
+/** Every series a photo is tied to, directly or through a target on a sheet. */
+export const photoSeries = (photo: PhotoRef): number[] =>
+  uniqueSorted([
+    ...(photo.si != null ? [photo.si] : []),
+    ...(photo.marks?.targets.flatMap((t) => (t.si != null ? [t.si] : [])) ?? []),
+  ]);
+
+/** The series that took their numbers from this photo: without marks it gave them none. */
+export const measuredSeries = (photo: PhotoRef): number[] =>
+  photo.marks ? photoSeries(photo) : [];
+
+/** The session without the photo; unless kept, the numbers taken from it go too. */
+export function withoutPhoto(session: Session, photo: PhotoRef, keepNumbers: boolean): Session {
+  const cleared = keepNumbers ? [] : measuredSeries(photo);
+  return {
+    ...session,
+    series: session.series.map((series, si): Series => {
+      if (!cleared.includes(si)) return series;
+      const { group: _group, offUp: _offUp, offRight: _offRight, ...rest } = series;
+      return rest;
+    }),
+    photos: (session.photos ?? []).filter((p) => p.id !== photo.id),
+  };
+}
+
+/** «3–5», «1, 3–5»: numbers in order, neighbours joined by a dash. */
+export function numberRanges(numbers: readonly number[]): string {
+  const runs: [number, number][] = [];
+  for (const n of uniqueSorted(numbers)) {
+    const last = runs.at(-1);
+    if (last && last[1] === n - 1) last[1] = n;
+    else runs.push([n, n]);
+  }
+  return runs.map(([a, b]) => (a === b ? String(a) : `${a}–${b}`)).join(', ');
+}
+
 /** «13 мм · ↓10 →9», or «в точку» when the group is on the point of aim. */
 export function offsetShort(offset: Offset | null): string {
   if (!offset) return '';
@@ -210,7 +249,8 @@ export function referenceText(reference: TargetReference): string {
     case 'grid':
       return `сетка ${numText(reference.step)} мм`;
     case 'rings':
-      return `кольца ${reference.diameters.map(numText).join('/')} мм`;
+      // A slash before a digit is no place for a line break by itself: many rings would not fit.
+      return `кольца ${reference.diameters.map(numText).join('/\u200b')} мм`;
   }
 }
 

@@ -98,7 +98,9 @@
                 type="button"
                 class="thumb"
                 [attr.aria-label]="'Фото мишени серии ' + row.number"
-                (click)="measure(photo, row.si, row.number)"
+                appHold
+                (tapped)="view(photo, row.si, row.number)"
+                (held)="openMenu(photo, row.si, row.number)"
               >
                 <app-photo [photoId]="photo.id" />
               </button>
@@ -120,7 +122,9 @@
               type="button"
               class="thumb"
               aria-label="Фото мишени"
-              (click)="openGeneral(photo)"
+              appHold
+              (tapped)="view(photo)"
+              (held)="openMenu(photo)"
             >
               <app-photo [photoId]="photo.id" />
             </button>
@@ -166,12 +170,55 @@
   <app-photo-measure
     [photoId]="m.photo.id"
     [context]="m.context"
-    [marks]="m.photo.marks"
+    [marks]="m.shot ? undefined : m.photo.marks"
+    [shot]="m.shot"
     (applied)="applyMeasure($event)"
     (closed)="measuring.set(null)"
   />
 }
 
-@if (viewing(); as photoId) {
-  <app-photo-viewer [photoId]="photoId" (closed)="viewing.set(null)" />
+@if (!measuring() && viewed(); as v) {
+  <app-photo-viewer
+    [photoId]="v.photo.id"
+    [marks]="v.photo.marks"
+    [heading]="v.heading"
+    [subtitle]="v.subtitle"
+    [group]="v.group"
+    [offsetText]="v.offset"
+    [canMeasure]="canMeasure()"
+    (closed)="viewing.set(null)"
+    (measure)="markUp(v.picked)"
+    (retake)="retake(v.picked, $event)"
+    (remove)="askDelete(v.picked)"
+  />
+}
+
+@if (menu(); as picked) {
+  <app-bottom-sheet [heading]="menuHeading()" (closed)="menu.set(null)">
+    <app-photo-actions
+      [canMeasure]="canMeasure()"
+      (measure)="markUp(picked)"
+      (retake)="retake(picked, $event)"
+      (remove)="askDelete(picked)"
+    />
+  </app-bottom-sheet>
+}
+
+@if (deletion(); as d) {
+  <app-photo-delete-sheet
+    [heading]="d.heading"
+    [text]="d.text"
+    [keepHint]="d.keepHint"
+    (confirmed)="confirmDelete($event)"
+    (cancelled)="deleting.set(null)"
+  />
+}
+
+@if (toast(); as t) {
+  <div class="toast" role="status">
+    <span>{{ t.text }}</span>
+    @if (t.undo) {
+      <button type="button" (click)="undoDelete()">Вернуть</button>
+    }
+  </div>
 }

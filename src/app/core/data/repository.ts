@@ -110,6 +110,24 @@ export class DiaryRepository {
     await this.db.photos.update(id, { deletedAt, updatedAt: deletedAt });
   }
 
+  /** Saves the session as it is without the photo and soft-deletes the photo: both or neither. */
+  async detachPhoto(session: DocInput<'session'>, photoId: string): Promise<void> {
+    const { db } = this;
+    await db.transaction('rw', db.sessions, db.photos, async () => {
+      await this.put('session', session);
+      await this.deletePhoto(photoId);
+    });
+  }
+
+  /** Undoes `detachPhoto`, given the session as it was before. */
+  async reattachPhoto(session: DocInput<'session'>, photoId: string): Promise<void> {
+    const { db } = this;
+    await db.transaction('rw', db.sessions, db.photos, async () => {
+      await this.put('session', session);
+      await db.photos.update(photoId, { deletedAt: undefined, updatedAt: now() });
+    });
+  }
+
   async getSetting<T>(key: string): Promise<T | undefined> {
     return (await this.db.settings.get(key))?.value as T | undefined;
   }

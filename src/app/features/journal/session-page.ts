@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import {
   ammoById,
@@ -20,6 +28,7 @@ import {
   seriesStatus,
   Session,
   sessionRounds,
+  shortDate,
   stanceName,
   toUnits,
   unitDigits,
@@ -27,8 +36,20 @@ import {
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
+import { shrinkPhoto } from '../../core/image';
+import { BottomSheet } from '../../shared/bottom-sheet';
+import { Hold } from '../../shared/hold';
 import { Photo } from '../../shared/photo';
-import { showsSeries, withMeasurement } from '../../core/target/measure';
+import { PhotoActions } from '../../shared/photo-actions';
+import {
+  measuredSeries,
+  numberRanges,
+  offsetShort,
+  photoSeries,
+  showsSeries,
+  withMeasurement,
+  withoutPhoto,
+} from '../../core/target/measure';
 import { PhotoViewer } from '../../shared/photo-viewer';
 import {
   MeasureApplied,
@@ -36,10 +57,45 @@ import {
   MeasureContext,
   PhotoMeasure,
 } from '../photo-measure/photo-measure';
+import { PhotoDeleteSheet } from './photo-delete-sheet';
+
+const TOAST_MS = 2000;
+
+/** A photo as it was picked on the page: a sheet can be picked from any of its series. */
+interface PickedPhoto {
+  id: string;
+  si: number | null;
+  number: number | null;
+}
+
+interface Toast {
+  text: string;
+  /** How to bring a deleted photo back. */
+  undo?: { session: Session; photoId: string };
+}
+
+const hasNumbers = (series: Series): boolean =>
+  series.group != null || series.offUp != null || series.offRight != null;
+
+/** «↑4 →3 мм»; nothing without an offset. */
+function offsetMm(series: Series): string {
+  if (series.offUp == null && series.offRight == null) return '';
+  const text = offsetShort({ offUp: series.offUp ?? 0, offRight: series.offRight ?? 0 });
+  return text === 'в точку' ? text : `${text} мм`;
+}
 
 @Component({
   selector: 'app-session-page',
-  imports: [Photo, PhotoMeasure, PhotoViewer, RouterLink],
+  imports: [
+    BottomSheet,
+    Hold,
+    Photo,
+    PhotoActions,
+    PhotoDeleteSheet,
+    PhotoMeasure,
+    PhotoViewer,
+    RouterLink,
+  ],
   templateUrl: './session-page.html',
   styleUrl: './session-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -52,12 +108,22 @@ export class SessionPage {
   /** Route parameter. */
   readonly id = input.required<string>();
 
-  protected readonly viewing = signal<string | null>(null);
+  protected readonly viewing = signal<PickedPhoto | null>(null);
+  protected readonly menu = signal<PickedPhoto | null>(null);
+  protected readonly deleting = signal<PickedPhoto | null>(null);
   protected readonly measuring = signal<{
     photo: PhotoRef;
     context: MeasureContext;
+    /** A retake: marked up from scratch, and only replaces the photo on apply. */
+    shot?: Blob;
   } | null>(null);
   protected readonly confirmingDelete = signal(false);
+  protected readonly toast = signal<Toast | null>(null);
+  private toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.toastTimer));
+  }
 
   protected readonly session = computed(() =>
     this.store.diary().sessions.find((s) => s.id === this.id()),
@@ -136,8 +202,131 @@ export class SessionPage {
     );
   });
 
+  /** Marks need a series to go to: a session of zeroing alone has none. */
+  protected readonly canMeasure = computed(
+    () => this.session()?.series.some((x) => x.kind === 'normal') ?? false,
+  );
+
+  protected readonly viewed = computed(() => {
+    const s = this.session();
+    const picked = this.viewing();
+    const photo = picked && this.photoOf(picked);
+    if (!s || !picked || !photo) return null;
+    const date = shortDate(s.date);
+    const rows = this.rowsOf(photo);
+    if (rows.length !== 1) {
+      const heading = rows.length
+        ? `Серии ${numberRanges(rows.map((r) => r.number))}`
+        : 'Фото мишени';
+      return { picked, photo, heading, subtitle: date, group: '', offset: '' };
+    }
+    const [row] = rows;
+    const series = s.series[row.si];
+    return {
+      picked,
+      photo,
+      heading: `Серия ${row.number}${series.dist != null ? ` · ${series.dist} м` : ''}`,
+      subtitle: `${date} · ${ammoName(ammoById(this.store.diary(), series.ammoId))}`,
+      group: row.group,
+      offset: offsetMm(series),
+    };
+  });
+
+  protected readonly menuHeading = computed(() => {
+    const picked = this.menu();
+    const photo = picked && this.photoOf(picked);
+    const numbers = photo ? this.rowsOf(photo).map((r) => r.number) : [];
+    if (!numbers.length) return 'Фото мишени';
+    return `Фото ${numbers.length > 1 ? 'серий' : 'серии'} ${numberRanges(numbers)}`;
+  });
+
+  protected readonly deletion = computed(() => {
+    const s = this.session();
+    const picked = this.deleting();
+    const photo = picked && this.photoOf(picked);
+    if (!s || !photo) return null;
+    const numbers = this.rowsOf(photo).map((r) => r.number);
+    return {
+      heading: numbers.length === 1 ? `Удалить фото серии ${numbers[0]}?` : 'Удалить фото?',
+      text: [
+        numbers.length > 1 ? `Оно привязано к сериям ${numberRanges(numbers)}.` : '',
+        photo.marks ? 'Разметка удалится вместе с фото.' : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      keepHint: this.keepHint(s, photo),
+    };
+  });
+
+  protected view(photo: PhotoRef, si: number | null = null, number: number | null = null): void {
+    this.viewing.set({ id: photo.id, si, number });
+  }
+
+  protected openMenu(
+    photo: PhotoRef,
+    si: number | null = null,
+    number: number | null = null,
+  ): void {
+    this.menu.set({ id: photo.id, si, number });
+  }
+
+  protected markUp(picked: PickedPhoto): void {
+    this.menu.set(null);
+    const photo = this.photoOf(picked);
+    if (photo) this.measure(photo, picked.si, picked.number);
+  }
+
+  /** The numbers in the series stay as they are until the new marks are applied. */
+  protected async retake(picked: PickedPhoto, file: File): Promise<void> {
+    this.menu.set(null);
+    const s = this.session();
+    const photo = this.photoOf(picked);
+    if (!s || !photo) return;
+    let shot: Blob;
+    try {
+      shot = await shrinkPhoto(file);
+    } catch {
+      this.showToast({ text: 'Не удалось прочитать снимок' });
+      return;
+    }
+    if (this.canMeasure()) {
+      this.measure(photo, picked.si, picked.number, shot);
+      return;
+    }
+    await this.store.replacePhoto(photo.id, shot);
+    if (photo.marks) {
+      const { marks: _marks, ...bare } = photo;
+      await this.store.save('session', {
+        ...s,
+        photos: (s.photos ?? []).map((p) => (p.id === photo.id ? bare : p)),
+      });
+    }
+  }
+
+  protected askDelete(picked: PickedPhoto): void {
+    this.menu.set(null);
+    this.deleting.set(picked);
+  }
+
+  protected async confirmDelete(keepNumbers: boolean): Promise<void> {
+    const s = this.session();
+    const picked = this.deleting();
+    const photo = picked && this.photoOf(picked);
+    this.deleting.set(null);
+    this.viewing.set(null);
+    if (!s || !photo) return;
+    await this.store.detachPhoto(withoutPhoto(s, photo, keepNumbers), photo.id);
+    this.showToast({ text: 'Фото удалено', undo: { session: s, photoId: photo.id } });
+  }
+
+  protected async undoDelete(): Promise<void> {
+    const undo = this.toast()?.undo;
+    this.hideToast();
+    if (undo) await this.store.reattachPhoto(undo.session, undo.photoId);
+  }
+
   /** `si` is null for a photo not tied to one series, or a sheet of several targets. */
-  protected measure(photo: PhotoRef, si: number | null, number: number | null): void {
+  private measure(photo: PhotoRef, si: number | null, number: number | null, shot?: Blob): void {
     const s = this.session();
     if (!s) return;
     const diary = this.store.diary();
@@ -147,12 +336,46 @@ export class SessionPage {
       si: sheet ? null : si,
       number: sheet ? null : number,
     });
-    this.measuring.set({ photo, context });
+    this.measuring.set({ photo, context, shot });
   }
 
-  protected openGeneral(photo: PhotoRef): void {
-    if (this.session()?.series.some((x) => x.kind === 'normal')) this.measure(photo, null, null);
-    else this.viewing.set(photo.id);
+  private photoOf(picked: PickedPhoto): PhotoRef | undefined {
+    return this.session()?.photos?.find((p) => p.id === picked.id);
+  }
+
+  /** The numbered series a photo is tied to; zeroing series have no number. */
+  private rowsOf(photo: PhotoRef) {
+    const tied = photoSeries(photo);
+    return this.rows().filter((row) => tied.includes(row.si));
+  }
+
+  /** «32 мм · ↑4 →3 мм — сняты с этого фото», or nothing when the photo gave no numbers. */
+  private keepHint(session: Session, photo: PhotoRef): string {
+    const measured = measuredSeries(photo).filter((si) => {
+      const series = session.series[si];
+      return series && hasNumbers(series);
+    });
+    if (!measured.length) return '';
+    if (measured.length > 1) {
+      const numbers = this.rows()
+        .filter((row) => measured.includes(row.si))
+        .map((row) => row.number);
+      return `в сериях ${numberRanges(numbers)} — сняты с этого фото`;
+    }
+    const series = session.series[measured[0]];
+    const parts = [series.group != null ? `${fmt(series.group, 0)} мм` : '', offsetMm(series)];
+    return `${parts.filter(Boolean).join(' · ')} — сняты с этого фото`;
+  }
+
+  private showToast(toast: Toast): void {
+    clearTimeout(this.toastTimer);
+    this.toast.set(toast);
+    this.toastTimer = setTimeout(() => this.toast.set(null), TOAST_MS);
+  }
+
+  private hideToast(): void {
+    clearTimeout(this.toastTimer);
+    this.toast.set(null);
   }
 
   protected async applyMeasure(result: MeasureApplied): Promise<void> {
