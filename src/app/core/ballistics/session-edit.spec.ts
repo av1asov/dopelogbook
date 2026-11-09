@@ -12,6 +12,31 @@ describe('afterSeriesRemoved', () => {
     ]);
   });
 
+  it('keeps the marks of an unlinked photo', () => {
+    const marks = {
+      scale: { source: 'manual' as const, p1: { x: 0, y: 0 }, p2: { x: 1, y: 0 }, mm: 1 },
+      targets: [],
+    };
+    expect(afterSeriesRemoved(0, [{ id: 'a', si: 0, marks }], null).photos).toEqual([
+      { id: 'a', marks },
+    ]);
+  });
+
+  it('shifts the series of the targets on a sheet', () => {
+    const scale = { source: 'sheet' as const, p1: { x: 0, y: 0 }, p2: { x: 1, y: 0 }, mm: 1 };
+    const targets = [
+      { n: 1, si: 0, holes: [] },
+      { n: 2, si: 1, holes: [] },
+      { n: 3, si: 2, holes: [] },
+    ];
+    const [photo] = afterSeriesRemoved(1, [{ id: 's', marks: { scale, targets } }], null).photos;
+    expect(photo.marks?.targets).toEqual([
+      { n: 1, si: 0, holes: [] },
+      { n: 2, holes: [] },
+      { n: 3, si: 1, holes: [] },
+    ]);
+  });
+
   it('drops the cold shot with its series', () => {
     expect(afterSeriesRemoved(0, [], { si: 0, offUp: 20 }).coldShot).toBeNull();
   });

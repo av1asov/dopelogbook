@@ -11,6 +11,7 @@ import {
   fmtTemp,
   groupAng,
   offText,
+  PhotoRef,
   plural,
   rdate,
   scopeById,
@@ -27,11 +28,18 @@ import {
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
 import { Photo } from '../../shared/photo';
+import { showsSeries, withMeasurement } from '../../core/target/measure';
 import { PhotoViewer } from '../../shared/photo-viewer';
+import {
+  MeasureApplied,
+  measureContext,
+  MeasureContext,
+  PhotoMeasure,
+} from '../photo-measure/photo-measure';
 
 @Component({
   selector: 'app-session-page',
-  imports: [Photo, PhotoViewer, RouterLink],
+  imports: [Photo, PhotoMeasure, PhotoViewer, RouterLink],
   templateUrl: './session-page.html',
   styleUrl: './session-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,6 +53,10 @@ export class SessionPage {
   readonly id = input.required<string>();
 
   protected readonly viewing = signal<string | null>(null);
+  protected readonly measuring = signal<{
+    photo: PhotoRef;
+    context: MeasureContext;
+  } | null>(null);
   protected readonly confirmingDelete = signal(false);
 
   protected readonly session = computed(() =>
@@ -120,9 +132,41 @@ export class SessionPage {
   protected readonly generalPhotos = computed(() => {
     const s = this.session();
     return (s?.photos ?? []).filter(
-      (p) => p.si == null || !s?.series[p.si] || s.series[p.si].kind === 'zeroing',
+      (p) => !s?.series.some((x, si) => x.kind === 'normal' && showsSeries(p, si)),
     );
   });
+
+  /** `si` is null for a photo not tied to one series, or a sheet of several targets. */
+  protected measure(photo: PhotoRef, si: number | null, number: number | null): void {
+    const s = this.session();
+    if (!s) return;
+    const diary = this.store.diary();
+    const rifle = diary.rifles.find((r) => r.id === s.rifleId);
+    const sheet = (photo.marks?.targets.length ?? 0) > 1 || photo.si == null;
+    const context = measureContext(diary, rifle, s, {
+      si: sheet ? null : si,
+      number: sheet ? null : number,
+    });
+    this.measuring.set({ photo, context });
+  }
+
+  protected openGeneral(photo: PhotoRef): void {
+    if (this.session()?.series.some((x) => x.kind === 'normal')) this.measure(photo, null, null);
+    else this.viewing.set(photo.id);
+  }
+
+  protected async applyMeasure(result: MeasureApplied): Promise<void> {
+    const s = this.session();
+    const current = this.measuring();
+    this.measuring.set(null);
+    if (!s || !current) return;
+    const { id, si } = current.photo;
+    const photo = result.sheet ? { id, marks: result.marks } : { id, si, marks: result.marks };
+    await this.store.save(
+      'session',
+      withMeasurement(s, photo, result.results, si === 0 ? result.cold : null),
+    );
+  }
 
   protected async resume(): Promise<void> {
     await this.store.reopenSession(this.id());
@@ -177,7 +221,7 @@ export class SessionPage {
       cold:
         cold?.si === si && !cold.standalone ? this.coldText(session, series, series.dist ?? 0) : '',
       note: series.note ?? '',
-      photos: (session.photos ?? []).filter((p) => p.si === si),
+      photos: (session.photos ?? []).filter((p) => showsSeries(p, si)),
     };
   }
 

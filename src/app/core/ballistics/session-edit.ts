@@ -1,4 +1,13 @@
-import { ColdShot, PhotoRef, Series, Session, ZeroEvent } from './model';
+import { ColdShot, PhotoRef, PhotoTarget, Series, Session, ZeroEvent } from './model';
+
+const shiftTarget =
+  (index: number) =>
+  (target: PhotoTarget): PhotoTarget => {
+    if (target.si == null || target.si < index) return target;
+    if (target.si > index) return { ...target, si: target.si - 1 };
+    const { si: _si, ...unlinked } = target;
+    return unlinked;
+  };
 
 /** Keeps photo links and the cold shot pointing at the right series after one is removed. */
 export function afterSeriesRemoved(
@@ -7,8 +16,17 @@ export function afterSeriesRemoved(
   coldShot: ColdShot | null | undefined,
 ): { photos: PhotoRef[]; coldShot: ColdShot | null } {
   const shifted = photos.map((photo) => {
-    if (photo.si === index) return { id: photo.id };
-    return photo.si != null && photo.si > index ? { ...photo, si: photo.si - 1 } : { ...photo };
+    const moved = photo.marks?.targets.some((t) => t.si != null)
+      ? {
+          ...photo,
+          marks: { ...photo.marks, targets: photo.marks.targets.map(shiftTarget(index)) },
+        }
+      : photo;
+    if (moved.si === index) {
+      const { si: _si, ...unlinked } = moved;
+      return unlinked;
+    }
+    return moved.si != null && moved.si > index ? { ...moved, si: moved.si - 1 } : { ...moved };
   });
   if (!coldShot) return { photos: shifted, coldShot: null };
   if (coldShot.si === index && !coldShot.standalone) return { photos: shifted, coldShot: null };

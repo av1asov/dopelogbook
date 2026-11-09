@@ -434,7 +434,7 @@ describe('repository', () => {
       const text = await exportText();
 
       await repository.restore(
-        { scopes: [], rifles: [], ammo: [], sessions: [], photos: [] },
+        { scopes: [], rifles: [], ammo: [], sessions: [], photos: [], targets: [] },
         'replace',
       );
       expect(await repository.diary()).toEqual({ scopes: [], rifles: [], ammo: [], sessions: [] });
@@ -450,6 +450,34 @@ describe('repository', () => {
       expect(restored?.size).toBe(dataUrlToBlob(PIXEL).size);
     });
 
+    it('keeps photo marks and target templates', async () => {
+      const marks = {
+        scale: { source: 'manual' as const, p1: { x: 0, y: 0 }, p2: { x: 60, y: 0 }, mm: 25 },
+        targets: [{ n: 1, aim: { x: 30, y: 30 }, holes: [{ x: 10, y: 10, auto: true }] }],
+      };
+      const photoId = await fill();
+      const session = (await repository.get('session', 's'))!;
+      await repository.put('session', { ...session, photos: [{ id: photoId, si: 0, marks }] });
+      await repository.put('target', {
+        id: 't',
+        name: 'T',
+        sheet: { w: 210, h: 297 },
+        targets: [{ n: 1, x: 105, y: 148, reference: { kind: 'grid', step: 10 } }],
+      });
+      const text = await exportText();
+
+      await repository.restore(
+        { scopes: [], rifles: [], ammo: [], sessions: [], photos: [], targets: [] },
+        'replace',
+      );
+      await repository.restore(parseBackup(text).snapshot, 'replace');
+      expect((await repository.get('session', 's'))?.photos?.[0].marks).toEqual(marks);
+      expect((await repository.get('target', 't'))?.targets[0].reference).toEqual({
+        kind: 'grid',
+        step: 10,
+      });
+    });
+
     it('add keeps the copy changed last', async () => {
       await fill();
       const text = await exportText();
@@ -463,7 +491,7 @@ describe('repository', () => {
       await fill();
       const text = await exportText();
       await repository.restore(
-        { scopes: [], rifles: [], ammo: [], sessions: [], photos: [] },
+        { scopes: [], rifles: [], ammo: [], sessions: [], photos: [], targets: [] },
         'replace',
       );
       await repository.put('ammo', { id: 'other', type: 'factory', name: 'Other' });

@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import { Ammo, Doc, Rifle, Scope, Session } from '../ballistics/model';
+import { Ammo, Doc, Rifle, Scope, Session, TargetTemplate } from '../ballistics/model';
 import { migrateToScopes, RifleV2, SessionV2 } from './scope-migration';
 
 export interface StoredPhoto extends Doc {
@@ -18,6 +18,7 @@ export interface Snapshot {
   ammo: Ammo[];
   sessions: Session[];
   photos: StoredPhoto[];
+  targets: TargetTemplate[];
 }
 
 export class DiaryDb extends Dexie {
@@ -27,6 +28,7 @@ export class DiaryDb extends Dexie {
   declare sessions: Table<Session, string>;
   declare photos: Table<StoredPhoto, string>;
   declare settings: Table<Setting, string>;
+  declare targets: Table<TargetTemplate, string>;
 
   constructor(name = 'dope') {
     super(name);
@@ -47,5 +49,6 @@ export class DiaryDb extends Dexie {
         await tx.table('rifles').bulkPut(migrated.rifles);
         await tx.table('sessions').bulkPut(migrated.sessions);
       });
+    this.version(3).stores({ targets: 'id' });
   }
 }

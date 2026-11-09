@@ -1,0 +1,104 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  overflow-y: auto;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--paper);
+}
+
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 0;
+  background: #1d221f;
+  color: #6cc185;
+  font-size: 13px;
+}
+
+.status {
+  flex: 1;
+  min-width: 0;
+}
+
+.photo {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+  background: #1d221f;
+}
+
+app-target-view {
+  width: min(190px, 100%);
+}
+
+.start {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 0;
+}
+
+.seg.sheets {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.seg button {
+  padding: 0;
+  font-size: 15px;
+}
+
+.plain {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  font-size: 15px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.row.last {
+  border-bottom: 0;
+}
+
+.row b {
+  text-align: right;
+}
+
+.detail {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.detail.pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}

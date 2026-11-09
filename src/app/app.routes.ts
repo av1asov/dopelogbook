@@ -11,6 +11,8 @@ import { RifleEditPage } from './features/rifles/rifle-edit-page';
 import { RiflesPage } from './features/rifles/rifles-page';
 import { ScopeEditPage } from './features/scopes/scope-edit-page';
 import { ScopesPage } from './features/scopes/scopes-page';
+import { TargetEditor } from './features/targets/target-editor';
+import { TargetsPage } from './features/targets/targets-page';
 
 const noTabs = { hideTabs: true };
 
@@ -35,5 +37,8 @@ export const routes: Routes = [
   { path: 'more/ammo', component: AmmoPage },
   { path: 'more/ammo/new', component: AmmoEditPage, data: noTabs },
   { path: 'more/ammo/:id', component: AmmoEditPage, data: noTabs },
+  { path: 'more/targets', component: TargetsPage },
+  { path: 'more/targets/new', component: TargetEditor, data: noTabs },
+  { path: 'more/targets/:id', component: TargetEditor, data: noTabs },
   { path: '**', redirectTo: 'range' },
 ];

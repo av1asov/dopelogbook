@@ -1,0 +1,36 @@
+.add {
+  min-height: 44px;
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+.row-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.text b {
+  font-size: 17px;
+}
+
+.specs {
+  font-size: 14px;
+}
+
+.note {
+  font-size: 13px;
+}
+
+.arrow {
+  font-size: 18px;
+}

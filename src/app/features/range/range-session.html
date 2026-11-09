@@ -331,6 +331,9 @@
           <input type="file" accept="image/*" hidden (change)="addPhoto($event)" />
         </label>
       </div>
+      @if (cameraHint()) {
+        <span class="hint">Снимайте основной камерой: широкоугольная искажает мишень.</span>
+      }
       @if (form.controls.skip.value) {
         <label class="field">
           Почему не учитывать
@@ -389,6 +392,15 @@
     </button>
   }
 </form>
+
+@if (measuring(); as id) {
+  <app-photo-measure
+    [photoId]="id"
+    [context]="measureContext()"
+    (applied)="applyMeasure(id, $event)"
+    (closed)="measuring.set(null)"
+  />
+}
 
 @if (pickerOpen()) {
   <app-series-picker

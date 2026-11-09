@@ -12,9 +12,18 @@
           "/manifest.webmanifest",
           "/*.css",
           "/*.js",
+          "!/worker-*.js",
           "/media/**",
           "/icons/**"
         ]
+      }
+    },
+    {
+      "name": "recognition",
+      "installMode": "prefetch",
+      "updateMode": "prefetch",
+      "resources": {
+        "files": ["/worker-*.js"]
       }
     }
   ]

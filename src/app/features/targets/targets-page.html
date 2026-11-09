@@ -1,0 +1,24 @@
+<div class="screen">
+  <div class="top-row">
+    <a routerLink="/more" class="back">‹ Ещё</a>
+    <a routerLink="/more/targets/new" class="btn-mark add">+ Мишень</a>
+  </div>
+  <h1 class="screen-title">Мишени</h1>
+
+  @for (card of cards(); track card.target.id) {
+    <a class="card row-card" [routerLink]="['/more/targets', card.target.id]">
+      <app-target-preview [template]="card.target" [length]="62" />
+      <span class="text">
+        <b>{{ card.target.name }}</b>
+        <span class="muted specs">{{ card.specs }}</span>
+        <span class="muted note">{{ card.note }}</span>
+      </span>
+      <span class="muted arrow">›</span>
+    </a>
+  }
+
+  <p class="hint">
+    Новую мишень удобнее всего завести по фото чистого листа: приложение само найдёт мишени и их
+    размер. Можно и прямо на рубеже — из выбора мишени при разметке фото.
+  </p>
+</div>
