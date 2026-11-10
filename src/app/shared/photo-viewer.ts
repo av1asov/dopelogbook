@@ -49,6 +49,7 @@ const CLOSE_DISTANCE = 90;
             [height]="shot.height"
             [aspect]="shot.width / shot.height"
             [markers]="markers()"
+            [zoomMarks]="true"
           />
         }
       </div>
