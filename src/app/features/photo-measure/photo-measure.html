@@ -83,6 +83,7 @@
         [markers]="markers()"
         [segments]="segments()"
         [full]="marksFull()"
+        [loupe]="mode() === 'aim'"
         (added)="added($event)"
         (selected)="selectedMark.set($event)"
         (moved)="moved($event)"

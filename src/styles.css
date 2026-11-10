@@ -134,9 +134,9 @@
   box-sizing: border-box;
 }
 
-/* Quick taps on ± must not trigger double-tap zoom; pinch zoom stays available. */
+/* The app never zooms: no pinch, no double tap. Only the target photo zooms, on its own. */
 * {
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 
 html {

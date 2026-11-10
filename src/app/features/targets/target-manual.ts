@@ -217,7 +217,7 @@ export class TargetManual implements OnInit, OnDestroy {
           ? 'Поставьте две точки'
           : 'Тяните точки, чтобы поправить';
       case 'targets': {
-        if (this.placingAim()) return 'Коснитесь точки прицеливания';
+        if (this.placingAim()) return 'Наведите лупу на точку прицеливания и отпустите';
         const next = this.centres().indexOf(null);
         return next < 0 ? 'Все мишени отмечены' : `Коснитесь центра мишени ${next + 1}`;
       }
