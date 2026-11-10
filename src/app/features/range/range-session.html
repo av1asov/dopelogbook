@@ -124,6 +124,14 @@
         <button type="button" class="pick" (click)="pickerOpen.set(true)">
           {{ scopeLabel() }}
         </button>
+        <button
+          type="button"
+          class="pick-edit"
+          aria-label="Изменить патрон, прицел, устройство, положение"
+          (click)="pickerOpen.set(true)"
+        >
+          изменить ›
+        </button>
         @if (sourceNote(); as note) {
           <span class="hint">{{ note }}</span>
         }

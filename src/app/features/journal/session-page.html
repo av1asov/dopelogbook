@@ -42,19 +42,42 @@
       </span>
     }
 
+    @if (setup().common.length) {
+      <div class="common muted">
+        <span>Во всех сериях:</span>
+        <b>
+          @for (part of setup().common; track $index) {
+            @if (!$first) {
+              ·
+            }
+            <span [class.warn]="part.warn">{{ part.text }}</span>
+          }
+        </b>
+      </div>
+    }
+
     @for (row of rows(); track row.si) {
-      @if (row.heading; as heading) {
-        <div class="heading">
-          <b>{{ heading.ammo }}</b>
-          <span class="muted">· {{ heading.rest }}</span>
-        </div>
-      }
       <article class="card series">
         <div class="series-head">
           <span class="number num">{{ row.number }}</span>
           <b class="num dist">{{ row.dist }}</b>
+          <span class="ammo" [attr.data-style]="row.ammoStyle">{{ row.ammo }}</span>
           <span class="pill" [class.off]="!row.use">{{ row.use ? 'в карте' : 'не в карте' }}</span>
         </div>
+        @if (row.setup.length) {
+          <span class="setup muted">
+            @for (part of row.setup; track $index) {
+              @if (!$first) {
+                ·
+              }
+              @if (part.warn) {
+                <b class="warn">{{ part.text }}</b>
+              } @else {
+                {{ part.text }}
+              }
+            }
+          </span>
+        }
         @if (row.why) {
           <span class="hint">{{ row.why }}</span>
         }

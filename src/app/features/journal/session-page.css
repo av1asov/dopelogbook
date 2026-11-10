@@ -60,13 +60,57 @@
   font-size: 14px;
 }
 
-.heading {
+.common {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 8px;
   padding-top: 4px;
   border-top: 2px solid var(--ink);
   font-size: 14px;
+}
+
+.common b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.common .warn {
+  color: var(--warn);
+}
+
+.setup {
+  margin-top: -2px;
+  font-size: 13px;
+}
+
+/* A cartridge chip; each cartridge of the day keeps one of three looks. */
+.ammo {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 1.5px solid var(--ink);
+  border-radius: 3px;
+  background: var(--ink);
+  color: var(--sheet);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ammo[data-style='1'] {
+  background: transparent;
+  color: var(--ink);
+}
+
+.ammo[data-style='2'] {
+  border-style: dashed;
+  background: transparent;
+  color: var(--ink);
 }
 
 .series {

@@ -6,4 +6,5 @@ export * from './model';
 export * from './range';
 export * from './series';
 export * from './session-edit';
+export * from './setup';
 export * from './stats';

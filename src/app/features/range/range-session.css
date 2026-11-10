@@ -125,6 +125,17 @@
   font-weight: 600;
 }
 
+.pick-edit {
+  min-height: 34px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pen);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .two {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
