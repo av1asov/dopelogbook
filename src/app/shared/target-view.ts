@@ -106,7 +106,7 @@ const MAX_ZOOM = 10;
       @for (m of shown(); track $index) {
         @switch (m.kind) {
           @case ('aim') {
-            <circle class="aim" [attr.cx]="m.x" [attr.cy]="m.y" [attr.r]="markUnit() * 13" />
+            <circle class="aim" [attr.cx]="m.x" [attr.cy]="m.y" [attr.r]="unit() * 13" />
             <path class="aim" [attr.d]="cross(m, 20, false)" />
           }
           @case ('centre') {
@@ -122,7 +122,7 @@ const MAX_ZOOM = 10;
             />
           }
           @case ('number') {
-            <text class="number" [attr.x]="m.x" [attr.y]="m.y" [attr.font-size]="markUnit() * 14">
+            <text class="number" [attr.x]="m.x" [attr.y]="m.y" [attr.font-size]="unit() * 14">
               {{ m.label }}
             </text>
           }
@@ -131,7 +131,7 @@ const MAX_ZOOM = 10;
               [attr.class]="m.kind"
               [attr.cx]="m.x"
               [attr.cy]="m.y"
-              [attr.r]="m.r ?? markUnit() * 9"
+              [attr.r]="m.r ?? unit() * 9"
             />
           }
         }
@@ -140,7 +140,7 @@ const MAX_ZOOM = 10;
             class="selected"
             [attr.cx]="m.x"
             [attr.cy]="m.y"
-            [attr.r]="(m.r ?? markUnit() * 9) + markUnit() * 6"
+            [attr.r]="(m.r ?? unit() * 9) + unit() * 6"
           />
         }
       }
@@ -184,8 +184,6 @@ export class TargetView {
   readonly full = input(false);
   /** Width over height of the frame. */
   readonly aspect = input(1);
-  /** Marks belong to the photo and grow with the zoom instead of keeping their size on screen. */
-  readonly zoomMarks = input(false);
 
   readonly added = output<TargetTap>();
   readonly refused = output<void>();
@@ -200,10 +198,6 @@ export class TargetView {
 
   /** Image pixels per screen pixel. */
   protected readonly unit = computed(() => this.view().s / this.screen());
-  /** What mark sizes are in: the whole-picture unit when marks grow with the zoom. */
-  protected readonly markUnit = computed(() =>
-    this.zoomMarks() ? this.side() / this.screen() : this.unit(),
-  );
   protected readonly viewBox = computed(() => {
     const { cx, cy, s } = this.view();
     const tall = s / this.aspect();
@@ -253,7 +247,7 @@ export class TargetView {
   }
 
   protected cross({ x, y }: Point, size: number, diagonal: boolean): string {
-    const d = size * this.markUnit();
+    const d = size * this.unit();
     return diagonal
       ? `M${x - d} ${y - d}L${x + d} ${y + d}M${x + d} ${y - d}L${x - d} ${y + d}`
       : `M${x} ${y - d}V${y + d}M${x - d} ${y}H${x + d}`;

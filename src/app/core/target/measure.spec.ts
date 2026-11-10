@@ -14,6 +14,7 @@ import {
   caliberMm,
   defaultSeries,
   fitLayout,
+  holeRadiusPx,
   matchesLayout,
   measuredSeries,
   measureTarget,
@@ -612,5 +613,18 @@ describe('caliberMm', () => {
     [undefined, 7.82],
   ])('%s', (text, expected) => {
     expect(caliberMm(text)).toBeCloseTo(expected, 1);
+  });
+});
+
+describe('holeRadiusPx', () => {
+  it('takes pixels per millimetre from a two-point scale', () => {
+    const scale = { source: 'manual', p1: { x: 0, y: 0 }, p2: { x: 400, y: 0 }, mm: 100 } as const;
+    expect(holeRadiusPx({ scale }, { x: 50, y: 50 }, 8)).toBeCloseTo(16);
+  });
+
+  it('takes them from the plane around the hole when there is a homography', () => {
+    const scale = { source: 'sheet', p1: { x: 0, y: 0 }, p2: { x: 1, y: 0 }, mm: 1 } as const;
+    const h = [0.5, 0, 0, 0, 0.5, 0, 0, 0, 1];
+    expect(holeRadiusPx({ scale, homography: h }, { x: 100, y: 100 }, 8)).toBeCloseTo(8);
   });
 });

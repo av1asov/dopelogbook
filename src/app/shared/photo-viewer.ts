@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { PhotoMarks } from '../core/ballistics';
 import { DiaryStore } from '../core/data/diary-store';
+import { holeRadiusPx } from '../core/target/measure';
 import { PhotoActions } from './photo-actions';
 import { Marker, TargetView } from './target-view';
 
@@ -49,7 +50,6 @@ const CLOSE_DISTANCE = 90;
             [height]="shot.height"
             [aspect]="shot.width / shot.height"
             [markers]="markers()"
-            [zoomMarks]="true"
           />
         }
       </div>
@@ -161,6 +161,8 @@ export class PhotoViewer {
 
   readonly photoId = input.required<string>();
   readonly marks = input<PhotoMarks>();
+  /** Bullet diameter: holes are drawn this size, as on the markup screen. */
+  readonly holeMm = input<number>();
   readonly heading = input('Фото мишени');
   readonly subtitle = input('');
   /** «32 мм · 1,1 MOA». */
@@ -175,11 +177,18 @@ export class PhotoViewer {
   readonly remove = output<void>();
 
   protected readonly image = signal<{ url: string; width: number; height: number } | null>(null);
-  protected readonly markers = computed((): Marker[] =>
-    (this.marks()?.targets ?? []).flatMap((target) =>
-      target.holes.map(({ x, y, cold }) => ({ x, y, kind: cold ? 'cold' : 'found' })),
-    ),
-  );
+  protected readonly markers = computed((): Marker[] => {
+    const marks = this.marks();
+    const holeMm = this.holeMm();
+    return (marks?.targets ?? []).flatMap((target) =>
+      target.holes.map(({ x, y, cold }) => ({
+        x,
+        y,
+        r: holeMm ? holeRadiusPx(marks!, { x, y }, holeMm) : undefined,
+        kind: cold ? 'cold' : 'found',
+      })),
+    );
+  });
 
   protected readonly dragged = signal(0);
   private startY: number | null = null;

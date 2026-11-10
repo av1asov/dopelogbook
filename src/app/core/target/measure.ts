@@ -14,7 +14,7 @@ import {
   TargetTemplate,
   TemplateTarget,
 } from '../ballistics/model';
-import { applyHomography, homography, rectangle } from './homography';
+import { applyHomography, homography, pxPerMmAt, rectangle } from './homography';
 
 export const SHEETS: readonly (readonly [string, SheetSize])[] = [
   ['A4', { w: 210, h: 297 }],
@@ -46,6 +46,18 @@ export function toMillimetres(
   const { p1, p2, mm } = marks.scale;
   const factor = mm / distance(p1, p2);
   return ({ x, y }) => ({ x: x * factor, y: y * factor });
+}
+
+/** The radius of a hole `holeMm` across at an image point, in image pixels. */
+export function holeRadiusPx(
+  marks: Pick<PhotoMarks, 'scale' | 'homography'>,
+  at: Point,
+  holeMm: number,
+): number {
+  if (marks.homography) {
+    return (holeMm / 2) * pxPerMmAt(marks.homography, applyHomography(marks.homography, at));
+  }
+  return ((holeMm / 2) * distance(marks.scale.p1, marks.scale.p2)) / marks.scale.mm;
 }
 
 /** How many marked photos were measured with a template. */
