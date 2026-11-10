@@ -496,7 +496,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
       case 'corners':
         return 'Перетащите четыре маркера на углы листа';
       case 'aim':
-        return 'Коснитесь точки прицеливания';
+        return 'Наведите лупу на точку прицеливания и отпустите';
       case 'cold':
         return 'Коснитесь пробоины холодного выстрела';
       default:
