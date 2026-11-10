@@ -48,9 +48,6 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
     }
 
     input {
-      height: 44px;
-      padding: 0 6px;
-      font-size: 18px;
       font-weight: 700;
     }
   `,

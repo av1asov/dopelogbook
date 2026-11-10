@@ -121,6 +121,7 @@
           <label>
             Длина, мм
             <input
+              class="input num"
               inputmode="decimal"
               autocomplete="off"
               [value]="mmText()"
@@ -143,6 +144,7 @@
           <label>
             Ширина, мм
             <input
+              class="input num"
               inputmode="decimal"
               autocomplete="off"
               [value]="sheetW()"
@@ -152,6 +154,7 @@
           <label>
             Высота, мм
             <input
+              class="input num"
               inputmode="decimal"
               autocomplete="off"
               [value]="sheetH()"
@@ -174,6 +177,7 @@
             <span></span>
           } @else {
             <select
+              class="input"
               [attr.aria-label]="'Серия для мишени ' + row.n"
               (change)="setSeries(row.n, $event)"
             >

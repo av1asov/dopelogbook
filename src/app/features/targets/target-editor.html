@@ -190,8 +190,9 @@
           </span>
           @if (form.controls.kind.value === 'rings') {
             @for (row of ringRows(); track $index) {
-              <div class="ring">
+              <div class="ring" [class.two]="row.edge === 'light-ring'">
                 <select
+                  class="input"
                   aria-label="Тип кольца"
                   [value]="row.edge"
                   (change)="changeRing($index, { edge: $any($event.target).value })"
@@ -204,7 +205,7 @@
                 </select>
                 @if (row.edge === 'light-ring') {
                   <input
-                    class="num"
+                    class="input num"
                     inputmode="decimal"
                     aria-label="Внутренний диаметр, мм"
                     placeholder="внутр."
@@ -212,7 +213,7 @@
                     (input)="changeRing($index, { dIn: $any($event.target).value })"
                   />
                   <input
-                    class="num"
+                    class="input num"
                     inputmode="decimal"
                     aria-label="Внешний диаметр, мм"
                     placeholder="внешн."
@@ -221,7 +222,7 @@
                   />
                 } @else {
                   <input
-                    class="num"
+                    class="input num"
                     inputmode="decimal"
                     aria-label="Диаметр, мм"
                     placeholder="⌀, мм"

@@ -133,7 +133,7 @@
 
 .three {
   display: grid;
-  grid-template-columns: 0.8fr 1fr 1fr;
+  grid-template-columns: minmax(0, 0.8fr) repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -197,8 +197,7 @@
 }
 
 .strong-input {
-  background: var(--paper) !important;
-  font-size: 18px !important;
+  background-color: var(--paper) !important;
   font-weight: 700 !important;
 }
 

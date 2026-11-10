@@ -94,9 +94,7 @@ p {
 }
 
 .field input {
-  height: 46px;
   font-family: var(--f-num);
-  font-size: 20px;
 }
 
 .box {

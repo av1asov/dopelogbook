@@ -62,9 +62,7 @@
 
 .velocity {
   width: 74px;
-  height: 44px;
-  padding: 0 8px;
-  background: var(--paper);
+  background-color: var(--paper);
 }
 
 .locked {
@@ -123,9 +121,7 @@
 .height {
   flex: none;
   width: 58px;
-  height: 44px;
-  padding: 0 6px;
-  background: var(--paper);
+  background-color: var(--paper);
 }
 
 .confirm {
