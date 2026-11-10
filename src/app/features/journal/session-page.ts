@@ -239,18 +239,20 @@ export class SessionPage {
     const photo = picked && this.photoOf(picked);
     if (!s || !picked || !photo) return null;
     const date = shortDate(s.date);
+    const { holeMm } = this.contextOf(s, photo, picked.si, picked.number);
     const rows = this.rowsOf(photo);
     if (rows.length !== 1) {
       const heading = rows.length
         ? `Серии ${numberRanges(rows.map((r) => r.number))}`
         : 'Фото мишени';
-      return { picked, photo, heading, subtitle: date, group: '', offset: '' };
+      return { picked, photo, holeMm, heading, subtitle: date, group: '', offset: '' };
     }
     const [row] = rows;
     const series = s.series[row.si];
     return {
       picked,
       photo,
+      holeMm,
       heading: `Серия ${row.number}${series.dist != null ? ` · ${series.dist} м` : ''}`,
       subtitle: `${date} · ${ammoName(ammoById(this.store.diary(), series.ammoId))}`,
       group: row.group,
@@ -367,14 +369,23 @@ export class SessionPage {
   private measure(photo: PhotoRef, si: number | null, number: number | null, shot?: Blob): void {
     const s = this.session();
     if (!s) return;
+    this.measuring.set({ photo, context: this.contextOf(s, photo, si, number), shot });
+  }
+
+  /** What the markup screen works with; the viewer takes the hole size from it too. */
+  private contextOf(
+    s: Session,
+    photo: PhotoRef,
+    si: number | null,
+    number: number | null,
+  ): MeasureContext {
     const diary = this.store.diary();
     const rifle = diary.rifles.find((r) => r.id === s.rifleId);
     const sheet = (photo.marks?.targets.length ?? 0) > 1 || photo.si == null;
-    const context = measureContext(diary, rifle, s, {
+    return measureContext(diary, rifle, s, {
       si: sheet ? null : si,
       number: sheet ? null : number,
     });
-    this.measuring.set({ photo, context, shot });
   }
 
   private photoOf(picked: PickedPhoto): PhotoRef | undefined {

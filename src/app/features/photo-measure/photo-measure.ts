@@ -46,13 +46,13 @@ import {
   homography,
   invertHomography,
   orderCorners,
-  pxPerMmAt,
   rectangle,
   tiltDegrees,
 } from '../../core/target/homography';
 import {
   caliberMm,
   defaultSeries,
+  holeRadiusPx,
   distance,
   matchesLayout,
   measureTarget,
@@ -282,11 +282,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     const flat = this.flatShown();
     if (flat) return (holeMm / 2) * flat.k;
     const marks = this.marks();
-    if (!marks) return undefined;
-    if (marks.homography) {
-      return (holeMm / 2) * pxPerMmAt(marks.homography, applyHomography(marks.homography, at));
-    }
-    return ((holeMm / 2) * distance(marks.scale.p1, marks.scale.p2)) / marks.scale.mm;
+    return marks ? holeRadiusPx(marks, at, holeMm) : undefined;
   }
 
   protected readonly results = computed(() => {
