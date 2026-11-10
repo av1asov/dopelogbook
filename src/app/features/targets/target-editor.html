@@ -8,6 +8,19 @@
   @if (viewSrc(); as url) {
     <div class="strip">
       <span class="status">{{ busy() ?? statusText() }}</span>
+      <label class="camera" aria-label="Переснять">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+          <circle cx="12" cy="13" r="3.5" />
+        </svg>
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          (change)="choosePhoto($event)"
+        />
+      </label>
       @if (flatSrc()) {
         <span class="view-seg">
           <button type="button" [attr.aria-pressed]="straight()" (click)="straight.set(true)">
@@ -67,10 +80,12 @@
       <div class="notice">{{ message }}</div>
     }
 
-    <label class="btn">
-      {{ blob() ? 'Переснять' : 'Снять чистый лист' }}
-      <input type="file" accept="image/*" hidden (change)="choosePhoto($event)" />
-    </label>
+    @if (!blob()) {
+      <label class="btn">
+        Снять чистый лист
+        <input type="file" accept="image/*" hidden (change)="choosePhoto($event)" />
+      </label>
+    }
 
     @if (src()) {
       <button type="button" class="btn by-hand" (click)="manualOpen.set(true)">

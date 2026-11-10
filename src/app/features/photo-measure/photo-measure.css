@@ -47,8 +47,15 @@ button {
   stroke-width: 2;
 }
 
-.icon[aria-pressed='true'] {
+.retake {
+  min-height: 44px;
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #f1c40f;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .title {
@@ -116,6 +123,14 @@ button {
   font-size: 13px;
 }
 
+.status.lost {
+  color: #ff8a80;
+}
+
+.lost-tools {
+  flex-basis: 100%;
+}
+
 .stage {
   position: relative;
   flex: none;
@@ -155,10 +170,11 @@ button {
   flex: 1;
 }
 
-.issue label {
-  display: inline-flex;
-  align-items: center;
+.issue button {
   min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #f1c40f;
   font-weight: 700;
 }

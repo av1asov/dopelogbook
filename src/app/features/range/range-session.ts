@@ -121,7 +121,8 @@ export class RangeSession implements OnInit {
   protected readonly pickerOpen = signal(false);
   protected readonly confirmingFinish = signal(false);
   protected readonly photos = signal<DraftPhoto[]>([]);
-  protected readonly measuring = signal<string | null>(null);
+  /** A new shot being marked up; it reaches the store only when applied or kept. */
+  protected readonly measuring = signal<{ id: string; shot: Blob } | null>(null);
   protected readonly cameraHint = signal(false);
   protected readonly photoBusy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -452,15 +453,19 @@ export class RangeSession implements OnInit {
     this.cameraHint.set(false);
     void this.settings.writeSetting(CAMERA_HINT, true);
     try {
-      const id = await this.store.addPhoto(await shrinkPhoto(file));
-      this.photos.update((list) => [...list, { id }]);
-      await this.storeDraft();
-      this.measuring.set(id);
+      this.measuring.set({ id: crypto.randomUUID(), shot: await shrinkPhoto(file) });
     } catch {
-      this.error.set('Не удалось сохранить фото.');
+      this.error.set('Не удалось прочитать фото.');
     } finally {
       this.photoBusy.set(false);
     }
+  }
+
+  /** «Сохранить фото без разметки»: the photo is already in the store. */
+  protected async keepPhoto(id: string): Promise<void> {
+    this.measuring.set(null);
+    this.photos.update((list) => [...list, { id }]);
+    await this.storeDraft();
   }
 
   protected async applyMeasure(id: string, result: MeasureApplied): Promise<void> {
@@ -474,11 +479,8 @@ export class RangeSession implements OnInit {
         'session',
         withMeasurement(this.session(), { id, marks: result.marks }, saved),
       );
-      this.photos.update((list) => list.filter((photo) => photo.id !== id));
     } else {
-      this.photos.update((list) =>
-        list.map((photo) => (photo.id === id ? { ...photo, marks: result.marks } : photo)),
-      );
+      this.photos.update((list) => [...list, { id, marks: result.marks }]);
     }
     if (current?.group != null) group.setValue(numText(current.group));
     if (current?.offset) {

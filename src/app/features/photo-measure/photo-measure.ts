@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
   inject,
   input,
   OnDestroy,
@@ -70,6 +71,7 @@ import { applyMarkEvent } from '../../core/target/mark-gesture';
 import { UndoToast } from '../../shared/undo-toast';
 import { MarkMove, Marker, Segment, TargetTap, TargetView } from '../../shared/target-view';
 import { SavedTarget, TargetEditor } from '../targets/target-editor';
+import { PhotoCancelSheet, Unsaved } from './photo-cancel-sheet';
 import { TargetPicker } from './target-picker';
 
 export interface MeasureContext {
@@ -153,7 +155,7 @@ const SOURCE_TEXT: Record<PhotoScale['source'], string> = {
 /** Screens 15 and 15б: finds the groups on a target photo and hands them to the series. */
 @Component({
   selector: 'app-photo-measure',
-  imports: [TargetEditor, TargetPicker, TargetView, UndoToast],
+  imports: [PhotoCancelSheet, TargetEditor, TargetPicker, TargetView, UndoToast],
   templateUrl: './photo-measure.html',
   styleUrl: './photo-measure.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -166,16 +168,20 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   readonly photoId = input.required<string>();
   readonly context = input.required<MeasureContext>();
   readonly saved = input<PhotoMarks | undefined>(undefined, { alias: 'marks' });
-  /** A new shot to mark up instead of the stored one, which it replaces only on apply. */
+  /**
+   * A shot to mark up instead of the stored one. It is written under `photoId` only on apply
+   * or «Сохранить фото без разметки»; until then it lives here alone.
+   */
   readonly shot = input<Blob>();
 
   readonly applied = output<MeasureApplied>();
+  /** The photo was saved as it is, without marks. */
+  readonly kept = output<void>();
   readonly closed = output<void>();
 
   protected readonly src = signal<string | null>(null);
   private readonly imageWidth = signal(0);
   private readonly imageHeight = signal(0);
-  protected readonly loupe = signal(false);
   protected readonly mode = signal<Mode>('holes');
   protected readonly picks = signal<readonly Point[]>([]);
   /** The mark touched last, for «Удалить точку». Its id is the same as in the markers. */
@@ -188,6 +194,13 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   protected readonly sheetH = signal(String(A4.h));
   protected readonly pickerOpen = signal(false);
   protected readonly creating = signal<Blob | null>(null);
+  private readonly camera = viewChild.required<ElementRef<HTMLInputElement>>('camera');
+  /** Marks, scale, point of aim or series were changed by hand: «Отмена» asks first. */
+  private readonly edited = signal(false);
+  protected readonly cancelling = signal<Unsaved | null>(null);
+  /** The template was not found on the photo. */
+  private readonly lost = signal(false);
+  protected readonly unrecognized = computed(() => this.lost() && !this.scale());
 
   protected readonly targetsList = this.store.targets;
   protected readonly targetId = signal('');
@@ -214,7 +227,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   private blob: Blob | undefined;
   /** The shot before turning; every turn starts from it, to re-encode only once. */
   private source: Blob | undefined;
-  /** The photo in the store. It changes only together with its marks: «Отмена» undoes both. */
+  /** The photo in the store; none for a new one. It changes only on apply or «Сохранить». */
   private stored: Blob | undefined;
   private turns = 0;
   private saving = false;
@@ -695,17 +708,74 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     await this.applyTemplate(template.id);
   }
 
+  protected openCamera(): void {
+    this.cancelling.set(null);
+    this.camera().nativeElement.click();
+  }
+
+  /** The new shot is marked up anew; the template and the series of the targets stay. */
   protected async retake(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
-    if (!file) return;
-    this.blob = this.source = await shrinkPhoto(file);
+    if (!file || this.saving) return;
+    const generation = ++this.generation;
+    let shot: Blob;
+    try {
+      shot = await shrinkPhoto(file);
+    } catch {
+      this.busy.set(null);
+      this.notice.set('Не удалось прочитать снимок');
+      return;
+    }
+    if (generation !== this.generation) return;
+    this.blob = this.source = shot;
     this.turns = 0;
     await this.loadPhoto();
+    const picked = this.pickedSeries();
+    this.mode.set('holes');
+    this.picks.set([]);
+    this.selectedMark.set(null);
     this.targets.set([{ n: 1, aim: null, holes: [] }]);
     this.resetPlane();
+    this.pickedSeries.set(picked);
+    this.edited.set(Object.keys(picked).length > 0);
     await this.detect(this.template(), false);
+  }
+
+  /** «Отмена»: straight out when nothing was changed by hand. */
+  protected cancel(): void {
+    if (!this.edited()) {
+      this.closed.emit();
+      return;
+    }
+    if (!this.stored) this.cancelling.set('photo');
+    else this.cancelling.set(this.source === this.stored ? 'marks' : 'shot');
+  }
+
+  /** «Сохранить фото без разметки»: the shot on show goes to the store, the marks do not. */
+  protected async keepPhoto(): Promise<void> {
+    if (this.saving) return;
+    this.cancelling.set(null);
+    if (this.blob && this.blob !== this.stored) {
+      this.saving = true;
+      try {
+        await this.store.replacePhoto(this.photoId(), this.blob);
+        this.stored = this.source = this.blob;
+        this.turns = 0;
+      } catch {
+        this.notice.set('Не удалось сохранить снимок');
+        return;
+      } finally {
+        this.saving = false;
+      }
+    }
+    this.kept.emit();
+  }
+
+  /** «Разметить вручную» after the target was not found: the scale first, as in step 1. */
+  protected markByHand(): void {
+    if (this.mode() !== 'scale') this.startMode('scale');
   }
 
   protected startMode(mode: Mode): void {
@@ -744,6 +814,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   protected added(tap: TargetTap): void {
     const at = this.fromView()(tap.at);
     this.selectedMark.set(null);
+    this.edited.set(true);
     switch (this.mode()) {
       case 'holes':
         this.updateHoles(this.nearestTarget(at), (holes) => [...holes, { ...at, auto: false }]);
@@ -764,6 +835,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
 
   protected moved({ id, at }: MarkMove): void {
     const point = this.fromView()(at);
+    this.edited.set(true);
     if (this.mode() !== 'holes') {
       this.picks.update((picks) => applyMarkEvent(picks, { type: 'move', id, at: point }, 4));
       return;
@@ -777,6 +849,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
 
   protected removeMark(id: number): void {
     this.selectedMark.set(null);
+    this.edited.set(true);
     if (this.mode() === 'holes') {
       const found = this.holeById(id);
       if (!found) return;
@@ -875,6 +948,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
 
   /** The sheet may lie so that nothing on it tells its numbers: a person can see them. */
   protected turnNumbers(): void {
+    this.edited.set(true);
     const targets = this.targets();
     const places = targets.map((t) => t.aim as Point);
     const centre = meanPoint(places) as Point;
@@ -956,6 +1030,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
   }
 
   private setManualPlane(scale: PhotoScale, matrix: number[] | undefined): void {
+    this.edited.set(true);
     this.scale.set(scale);
     this.matrix.set(matrix);
     this.scaleLocked.set(true);
@@ -970,6 +1045,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
 
   protected setSeries(n: number, event: Event): void {
     const si = Number((event.target as HTMLSelectElement).value);
+    this.edited.set(true);
     this.pickedSeries.update((picked) => ({ ...picked, [n]: si }));
   }
 
@@ -1040,6 +1116,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
     const { holeMm, shots } = this.context();
     this.busy.set('Ищу мишень и пробоины…');
     this.notice.set(null);
+    this.lost.set(false);
     try {
       const image = await readPixels(this.blob);
       const clean = template?.cleanRef ? await this.cleanSheet(template.cleanRef) : null;
@@ -1087,7 +1164,7 @@ export class PhotoMeasure implements OnInit, OnDestroy {
       this.quality.set(quality);
       await this.showFlat(flat);
     } else if (template || this.targetId()) {
-      this.notice.set('Мишень не распознана — задайте масштаб вручную');
+      this.lost.set(true);
     } else {
       this.notice.set('Отметьте масштаб и точку прицеливания');
     }

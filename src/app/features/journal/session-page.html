@@ -173,6 +173,7 @@
     [marks]="m.shot ? undefined : m.photo.marks"
     [shot]="m.shot"
     (applied)="applyMeasure($event)"
+    (kept)="keepPhoto()"
     (closed)="measuring.set(null)"
   />
 }

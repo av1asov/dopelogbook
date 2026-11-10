@@ -393,11 +393,13 @@
   }
 </form>
 
-@if (measuring(); as id) {
+@if (measuring(); as m) {
   <app-photo-measure
-    [photoId]="id"
+    [photoId]="m.id"
+    [shot]="m.shot"
     [context]="measureContext()"
-    (applied)="applyMeasure(id, $event)"
+    (applied)="applyMeasure(m.id, $event)"
+    (kept)="keepPhoto(m.id)"
     (closed)="measuring.set(null)"
   />
 }

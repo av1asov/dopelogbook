@@ -294,13 +294,25 @@ export class SessionPage {
       return;
     }
     await this.store.replacePhoto(photo.id, shot);
-    if (photo.marks) {
-      const { marks: _marks, ...bare } = photo;
-      await this.store.save('session', {
-        ...s,
-        photos: (s.photos ?? []).map((p) => (p.id === photo.id ? bare : p)),
-      });
-    }
+    await this.dropMarks(s, photo);
+  }
+
+  /** The numbers in the series stay; only the marks leave the photo. */
+  private async dropMarks(s: Session, photo: PhotoRef): Promise<void> {
+    if (!photo.marks) return;
+    const { marks: _marks, ...bare } = photo;
+    await this.store.save('session', {
+      ...s,
+      photos: (s.photos ?? []).map((p) => (p.id === photo.id ? bare : p)),
+    });
+  }
+
+  /** «Сохранить фото без разметки»: the photo is already written by the marking screen. */
+  protected async keepPhoto(): Promise<void> {
+    const s = this.session();
+    const current = this.measuring();
+    this.measuring.set(null);
+    if (s && current) await this.dropMarks(s, current.photo);
   }
 
   protected askDelete(picked: PickedPhoto): void {
