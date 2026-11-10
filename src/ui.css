@@ -310,18 +310,28 @@
   text-transform: uppercase;
 }
 
-.field input,
-.field textarea,
-.field select,
+/*
+ * The one style of a field, date and select included (spec, «iOS-требования»). Without
+ * `appearance: none` and `display: block` Safari draws its own date control, wider than the
+ * column and taller than the fields next to it. Fields side by side go in a grid of
+ * `minmax(0, …fr)` columns, never fixed widths: «10 нояб. 2026 г.» is long.
+ * `:where` keeps the weight of one class, so a screen can still recolour its fields.
+ */
+.field :where(input:not([type='checkbox'], [type='radio'], [type='file']), select, textarea),
 .input {
+  display: block;
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   height: 44px;
+  margin: 0;
   padding: 0 10px;
   border: 1px solid var(--rule);
   border-bottom: 2px solid var(--ink);
   border-radius: 0;
-  background: var(--sheet);
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--sheet);
   color: var(--ink);
   font-size: 17px;
   font-weight: 400;
@@ -329,13 +339,37 @@
   text-transform: none;
 }
 
-.field textarea {
+/* `appearance: none` takes the arrow away; the grey reads on both themes. */
+.field :where(select),
+select.input {
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238a948c' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+/* Without its own control the value sits at the top; 41px is the box less its borders. */
+.field :where(input[type='date'], input[type='time']),
+.input:is([type='date'], [type='time']) {
+  line-height: 41px;
+}
+
+input::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+input::-webkit-datetime-edit {
+  padding: 0;
+}
+
+.field :where(textarea),
+textarea.input {
   height: 72px;
   padding: 8px 10px;
   resize: none;
 }
 
-.field input.num,
+.field :where(input.num),
 .input.num {
   font-family: var(--f-num);
 }

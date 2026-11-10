@@ -22,6 +22,24 @@
   min-width: 0;
 }
 
+.camera {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 34px;
+  border: 1.5px solid #56605a;
+  border-radius: 6px;
+  color: #f1c40f;
+}
+
+.camera svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
 .photo {
   display: flex;
   justify-content: center;
@@ -141,26 +159,17 @@ app-target-view {
 }
 
 .ring {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 44px;
   align-items: center;
   gap: 6px;
 }
 
-.ring select {
-  flex: 1 1 110px;
-  min-width: 0;
-  min-height: 44px;
-  font-size: 16px;
-}
-
-.ring .num {
-  width: 72px;
-  flex: none;
+.ring.two {
+  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)) 44px;
 }
 
 .ring-remove {
-  flex: none;
   width: 44px;
   height: 44px;
   border: 0;

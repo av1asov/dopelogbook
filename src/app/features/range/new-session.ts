@@ -99,6 +99,13 @@ export class NewSession implements OnInit {
     return rifle.combos.map((c) => ({ id: c.ammoId, name: ammoName(ammoById(diary, c.ammoId)) }));
   }
 
+  /** The plan is always on show, as on the mockup; opening it to change means zeroing. */
+  protected editZero(): void {
+    const open = !this.editingZero();
+    this.editingZero.set(open);
+    if (open) this.form.controls.zeroingOn.setValue(true);
+  }
+
   protected zeroAmmoName(): string {
     return ammoName(ammoById(this.store.diary(), this.form.controls.zeroAmmo.value));
   }

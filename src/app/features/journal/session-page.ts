@@ -10,9 +10,9 @@ import {
 import { Router, RouterLink } from '@angular/router';
 import {
   ammoById,
+  ammoChipName,
   ammoName,
   clicksText,
-  devName,
   elevEff,
   fmt,
   fmtAng,
@@ -28,8 +28,8 @@ import {
   seriesStatus,
   Session,
   sessionRounds,
+  sessionSetup,
   shortDate,
-  stanceName,
   toUnits,
   unitDigits,
   unitsOf,
@@ -60,6 +60,8 @@ import {
 import { PhotoDeleteSheet } from './photo-delete-sheet';
 
 const TOAST_MS = 2000;
+/** Filled, outlined, dashed: enough to tell the cartridges of one day apart. */
+const AMMO_STYLES = 3;
 
 /** A photo as it was picked on the page: a sheet can be picked from any of its series. */
 interface PickedPhoto {
@@ -180,18 +182,42 @@ export class SessionPage {
     };
   });
 
-  /** Series, with a heading wherever the ammo, device or stance changes. */
+  /** The series on show, in the order they were shot. */
+  private readonly shown = computed(() =>
+    (this.session()?.series ?? [])
+      .map((series, si) => ({ series, si }))
+      .filter(({ series }) => series.kind === 'normal'),
+  );
+
+  /** What all the series share, and what tells each one apart. */
+  protected readonly setup = computed(() => {
+    const s = this.session();
+    const diary = this.store.diary();
+    const rifle = diary.rifles.find((r) => r.id === s?.rifleId);
+    return sessionSetup(
+      this.shown(),
+      (id) => scopeById(diary, id)?.name ?? '',
+      !!rifle?.devices?.length,
+    );
+  });
+
   protected readonly rows = computed(() => {
     const s = this.session();
     if (!s) return [];
-    let previous = '';
-    let number = 0;
-    return s.series.flatMap((series, si) => {
-      if (series.kind === 'zeroing') return [];
-      const key = [series.ammoId, series.scopeId, series.device, series.pos, series.rest].join('|');
-      const heading = key === previous ? null : this.heading(series);
-      previous = key;
-      return [{ si, number: ++number, heading, ...this.describe(s, series, si) }];
+    const diary = this.store.diary();
+    const own = this.setup().own;
+    // Each cartridge keeps its chip style through the record, in the order it first came.
+    const styles = new Map<string, number>();
+    return this.shown().map(({ series, si }, i) => {
+      if (!styles.has(series.ammoId)) styles.set(series.ammoId, styles.size % AMMO_STYLES);
+      return {
+        si,
+        number: i + 1,
+        ammo: ammoChipName(ammoName(ammoById(diary, series.ammoId))),
+        ammoStyle: styles.get(series.ammoId) ?? 0,
+        setup: own.get(si) ?? [],
+        ...this.describe(s, series, si),
+      };
     });
   });
 
@@ -294,13 +320,25 @@ export class SessionPage {
       return;
     }
     await this.store.replacePhoto(photo.id, shot);
-    if (photo.marks) {
-      const { marks: _marks, ...bare } = photo;
-      await this.store.save('session', {
-        ...s,
-        photos: (s.photos ?? []).map((p) => (p.id === photo.id ? bare : p)),
-      });
-    }
+    await this.dropMarks(s, photo);
+  }
+
+  /** The numbers in the series stay; only the marks leave the photo. */
+  private async dropMarks(s: Session, photo: PhotoRef): Promise<void> {
+    if (!photo.marks) return;
+    const { marks: _marks, ...bare } = photo;
+    await this.store.save('session', {
+      ...s,
+      photos: (s.photos ?? []).map((p) => (p.id === photo.id ? bare : p)),
+    });
+  }
+
+  /** «Сохранить фото без разметки»: the photo is already written by the marking screen. */
+  protected async keepPhoto(): Promise<void> {
+    const s = this.session();
+    const current = this.measuring();
+    this.measuring.set(null);
+    if (s && current) await this.dropMarks(s, current.photo);
   }
 
   protected askDelete(picked: PickedPhoto): void {
@@ -403,16 +441,6 @@ export class SessionPage {
   protected async remove(): Promise<void> {
     await this.store.remove('session', this.id());
     await this.router.navigate(['/journal']);
-  }
-
-  private heading(series: Series) {
-    const diary = this.store.diary();
-    const ammo = ammoName(ammoById(diary, series.ammoId));
-    const scope = scopeById(diary, series.scopeId)?.name;
-    return {
-      ammo,
-      rest: [scope, devName(series.device), stanceName(series)].filter(Boolean).join(' · '),
-    };
   }
 
   private describe(session: Session, series: Series, si: number) {

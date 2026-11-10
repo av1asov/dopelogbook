@@ -78,8 +78,8 @@
       <input type="checkbox" formControlName="zeroingOn" />
       Начать с пристрелки
     </label>
-    @if (form.controls.zeroingOn.value && rifle(); as current) {
-      <button type="button" class="zero-plan" (click)="editingZero.set(!editingZero())">
+    @if (rifle(); as current) {
+      <button type="button" class="zero-plan" (click)="editZero()">
         Ноль на <b>{{ form.controls.zeroDist.value }} м</b> · {{ zeroAmmoName() }} ·
         {{ zeroScopeName() }} ›
       </button>

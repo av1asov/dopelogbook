@@ -1,6 +1,6 @@
 <div class="measure" role="dialog" aria-label="Разметка мишени">
   <header>
-    <button type="button" class="text" (click)="closed.emit()">Отмена</button>
+    <button type="button" class="text" (click)="cancel()">Отмена</button>
     <span class="title">
       <b>{{ sheetMode() ? context().sheetTitle : context().title }}</b>
       <span>{{ sheetMode() ? context().sheetSubtitle : context().subtitle }}</span>
@@ -17,19 +17,16 @@
           <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 3.5v5h-5" />
         </svg>
       </button>
-      <button
-        type="button"
-        class="icon"
-        aria-label="Лупа"
-        [attr.aria-pressed]="loupe()"
-        (click)="loupe.set(!loupe())"
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="10" cy="10" r="6.5" />
-          <path d="M15 15l6 6M10 7v6M7 10h6" />
-        </svg>
-      </button>
+      <button type="button" class="retake" (click)="openCamera()">Переснять</button>
     </span>
+    <input
+      #camera
+      type="file"
+      accept="image/*"
+      capture="environment"
+      hidden
+      (change)="retake($event)"
+    />
   </header>
 
   @if (!sheetMode()) {
@@ -58,11 +55,21 @@
         </button>
       </span>
     }
-    @if (sheetMode() && status(); as line) {
+    @if (unrecognized()) {
+      <span class="status lost">Мишень не распознана — переснимите или разметьте вручную</span>
+    } @else if (sheetMode() && status(); as line) {
       <span class="status">{{ line }}</span>
     }
     @if (canTurnNumbers()) {
       <button type="button" class="turn-numbers" (click)="turnNumbers()">⟳ Номера</button>
+    }
+    @if (unrecognized()) {
+      <div class="tools lost-tools">
+        <button type="button" (click)="openCamera()">Переснять</button>
+        <button type="button" [attr.aria-pressed]="mode() === 'scale'" (click)="markByHand()">
+          Разметить вручную
+        </button>
+      </div>
     }
   </div>
 
@@ -75,7 +82,6 @@
         [aspect]="viewAspect()"
         [markers]="markers()"
         [segments]="segments()"
-        [loupe]="loupe()"
         [full]="marksFull()"
         (added)="added($event)"
         (selected)="selectedMark.set($event)"
@@ -95,10 +101,7 @@
   @if (issue(); as text) {
     <div class="issue">
       <span>{{ text }}</span>
-      <label>
-        Переснять
-        <input type="file" accept="image/*" hidden (change)="retake($event)" />
-      </label>
+      <button type="button" (click)="openCamera()">Переснять</button>
     </div>
   }
 
@@ -118,6 +121,7 @@
           <label>
             Длина, мм
             <input
+              class="input num"
               inputmode="decimal"
               autocomplete="off"
               [value]="mmText()"
@@ -140,6 +144,7 @@
           <label>
             Ширина, мм
             <input
+              class="input num"
               inputmode="decimal"
               autocomplete="off"
               [value]="sheetW()"
@@ -149,6 +154,7 @@
           <label>
             Высота, мм
             <input
+              class="input num"
               inputmode="decimal"
               autocomplete="off"
               [value]="sheetH()"
@@ -171,6 +177,7 @@
             <span></span>
           } @else {
             <select
+              class="input"
               [attr.aria-label]="'Серия для мишени ' + row.n"
               (change)="setSeries(row.n, $event)"
             >
@@ -241,6 +248,16 @@
     (chosen)="chooseTarget($event)"
     (create)="newTemplate()"
     (closed)="pickerOpen.set(false)"
+  />
+}
+
+@if (cancelling(); as unsaved) {
+  <app-photo-cancel-sheet
+    [unsaved]="unsaved"
+    (retake)="openCamera()"
+    (keep)="keepPhoto()"
+    (leave)="closed.emit()"
+    (resumed)="cancelling.set(null)"
   />
 }
 

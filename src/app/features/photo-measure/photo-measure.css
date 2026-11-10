@@ -47,8 +47,15 @@ button {
   stroke-width: 2;
 }
 
-.icon[aria-pressed='true'] {
+.retake {
+  min-height: 44px;
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #f1c40f;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .title {
@@ -116,6 +123,14 @@ button {
   font-size: 13px;
 }
 
+.status.lost {
+  color: #ff8a80;
+}
+
+.lost-tools {
+  flex-basis: 100%;
+}
+
 .stage {
   position: relative;
   flex: none;
@@ -155,10 +170,11 @@ button {
   flex: 1;
 }
 
-.issue label {
-  display: inline-flex;
-  align-items: center;
+.issue button {
   min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #f1c40f;
   font-weight: 700;
 }
@@ -181,13 +197,10 @@ button {
 }
 
 .rows select {
-  min-height: 44px;
-  padding: 0 8px;
   border: 1.5px solid #56605a;
   border-radius: 6px;
-  background: transparent;
+  background-color: transparent;
   color: #f5f6f2;
-  font-size: 16px;
 }
 
 .rows .num {
@@ -305,12 +318,14 @@ main {
 }
 
 .entry {
-  align-items: flex-end;
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  align-items: end;
 }
 
 .entry label {
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
@@ -319,14 +334,9 @@ main {
 }
 
 .entry input {
-  height: 44px;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0 8px;
   border: 1px solid #56605a;
-  background: #2a302b;
+  background-color: #2a302b;
   color: #f5f6f2;
-  font-family: var(--f-num);
 }
 
 button:disabled {
