@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <!-- Startup images, one per iPhone screen and theme: iOS reads them when the app is added. -->
+    <!-- Startup images, one per iPhone screen and theme, for older iOS: iOS 27 never requests them. -->
     <!-- iPhone 16 Pro Max / 17 Pro Max -->
     <link rel="apple-touch-startup-image" media="screen and (device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" href="splash/splash-1320x2868-light.png">
     <link rel="apple-touch-startup-image" media="screen and (device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="splash/splash-1320x2868-dark.png">
@@ -51,32 +51,45 @@
     <!-- iPhone 6/7/8 Plus -->
     <link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)" href="splash/splash-1242x2208-light.png">
     <link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="splash/splash-1242x2208-dark.png">
-    <!-- The same splash while Angular loads; bootstrapping replaces the content of app-root. -->
+    <!-- The splash that is actually seen: iOS 27 ignores the startup images and shows a blank
+         dark screen (theme-color) first. The splash continues it in the same colour, whatever the
+         theme, fades the mark in, and main.ts fades it out over the app. -->
     <style>
       .splash {
-        --bg: #f1c40f;
-        --fg: #1d221f;
-        --ring: rgba(29, 34, 31, 0.09);
-        --cap: #4a4410;
-        --tick: rgba(29, 34, 31, 0.5);
+        --bg: #1d221f;
+        --fg: #f1c40f;
+        --ring: rgba(241, 196, 15, 0.07);
+        --cap: #b9c2bb;
+        --tick: rgba(241, 196, 15, 0.45);
         position: fixed;
         inset: 0;
+        z-index: 2147483647;
         overflow: hidden;
         background: var(--bg);
+        /* Covers the app only to the eye: taps already reach it while the splash fades. */
+        pointer-events: none;
+        transition: opacity 0.3s ease-in;
       }
-      @media (prefers-color-scheme: dark) {
-        .splash {
-          --bg: #1d221f;
-          --fg: #f1c40f;
-          --ring: rgba(241, 196, 15, 0.07);
-          --cap: #b9c2bb;
-          --tick: rgba(241, 196, 15, 0.45);
-        }
+      .splash.splash-out {
+        opacity: 0;
       }
       .splash svg {
         position: absolute;
         left: 50%;
         overflow: visible;
+        animation: splash-in 0.35s ease-out both;
+      }
+      @keyframes splash-in {
+        from {
+          opacity: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .splash,
+        .splash svg {
+          transition: none;
+          animation: none;
+        }
       }
       .splash .mark {
         top: 45%;
@@ -104,46 +117,45 @@
     <noscript><style>.splash { display: none; }</style></noscript>
   </head>
   <body>
-    <app-root>
-      <div class="splash" role="img" aria-label="DOPE — дневник стрелка">
-        <svg class="mark" viewBox="0 -14 443 128" aria-hidden="true">
-          <g class="rings" fill="none" style="stroke: var(--ring)">
-            <circle cx="221.5" cy="50" r="55" stroke-width="1.2" />
-            <circle cx="221.5" cy="50" r="104.5" stroke-width="1.2" />
-            <circle cx="221.5" cy="50" r="159.5" />
-            <circle cx="221.5" cy="50" r="225.5" />
-            <circle cx="221.5" cy="50" r="302.5" />
-            <circle cx="221.5" cy="50" r="396" />
+    <div class="splash" role="img" aria-label="DOPE — дневник стрелка">
+      <svg class="mark" viewBox="0 -14 443 128" aria-hidden="true">
+        <g class="rings" fill="none" style="stroke: var(--ring)">
+          <circle cx="221.5" cy="50" r="55" stroke-width="1.2" />
+          <circle cx="221.5" cy="50" r="104.5" stroke-width="1.2" />
+          <circle cx="221.5" cy="50" r="159.5" />
+          <circle cx="221.5" cy="50" r="225.5" />
+          <circle cx="221.5" cy="50" r="302.5" />
+          <circle cx="221.5" cy="50" r="396" />
+        </g>
+        <g fill="none" style="stroke: var(--fg)" stroke-width="17">
+          <path d="M8.5 8.5H46A41.5 41.5 0 0 1 46 91.5H8.5Z" />
+          <path transform="translate(259 0)" d="M8.5 100V8.5H52A23 23 0 0 1 52 54.5H8.5" />
+          <path transform="translate(363 0)" d="M80 8.5H8.5V91.5H80M8.5 50H64" />
+          <g transform="translate(177 50)">
+            <circle r="41.5" />
+            <path d="M0 -33V-12M0 33V12M-33 0H-12M33 0H12" stroke-width="3.2" />
+            <path d="M0 -50V-64M0 50V64M-50 0H-62M50 0H62" stroke-width="5" />
+            <circle r="3.6" style="fill: var(--fg)" stroke="none" />
           </g>
-          <g fill="none" style="stroke: var(--fg)" stroke-width="17">
-            <path d="M8.5 8.5H46A41.5 41.5 0 0 1 46 91.5H8.5Z" />
-            <path transform="translate(259 0)" d="M8.5 100V8.5H52A23 23 0 0 1 52 54.5H8.5" />
-            <path transform="translate(363 0)" d="M80 8.5H8.5V91.5H80M8.5 50H64" />
-            <g transform="translate(177 50)">
-              <circle r="41.5" />
-              <path d="M0 -33V-12M0 33V12M-33 0H-12M33 0H12" stroke-width="3.2" />
-              <path d="M0 -50V-64M0 50V64M-50 0H-62M50 0H62" stroke-width="5" />
-              <circle r="3.6" style="fill: var(--fg)" stroke="none" />
-            </g>
-          </g>
-        </svg>
-        <svg class="caption" aria-hidden="true">
-          <text
-            text-anchor="middle"
-            font-family="Inter, system-ui, -apple-system, sans-serif"
-            font-weight="600"
-            letter-spacing="0.32em"
-            style="fill: var(--cap)"
-          >
-            ДНЕВНИК СТРЕЛКА
-          </text>
-        </svg>
-        <svg class="ruler" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0 0V12M10 3V9M20 3V9M30 3V9M40 3V9M50 0V12M60 3V9M70 3V9M80 3V9M90 3V9M100 0V12" style="stroke: var(--tick)" stroke-width="1.4" />
-          <path d="M0 6H100" style="stroke: var(--tick)" stroke-width="1" />
-        </svg>
-      </div>
-    </app-root>
+        </g>
+      </svg>
+      <svg class="caption" aria-hidden="true">
+        <text
+          text-anchor="middle"
+          font-family="Inter, system-ui, -apple-system, sans-serif"
+          font-weight="600"
+          letter-spacing="0.32em"
+          style="fill: var(--cap)"
+        >
+          ДНЕВНИК СТРЕЛКА
+        </text>
+      </svg>
+      <svg class="ruler" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 0V12M10 3V9M20 3V9M30 3V9M40 3V9M50 0V12M60 3V9M70 3V9M80 3V9M90 3V9M100 0V12" style="stroke: var(--tick)" stroke-width="1.4" />
+        <path d="M0 6H100" style="stroke: var(--tick)" stroke-width="1" />
+      </svg>
+    </div>
+    <app-root></app-root>
     <noscript>Для работы приложения нужен JavaScript.</noscript>
   </body>
 </html>
