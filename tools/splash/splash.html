@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;height:100%}body{display:flex;align-items:center;justify-content:center;overflow:hidden}
+</style></head><body><div id="root"></div>
+<script>
+const q=new URLSearchParams(location.search), theme=q.get('t')||'dark';
+const W=innerWidth,H=innerHeight;
+const C=theme==='dark'?{bg:'#1d221f',fg:'#f1c40f',ring:'rgba(241,196,15,.07)',cap:'#b9c2bb',tick:'rgba(241,196,15,.45)'}:{bg:'#f1c40f',fg:'#1d221f',ring:'rgba(29,34,31,.09)',cap:'#4a4410',tick:'rgba(29,34,31,.5)'};
+document.body.style.background=C.bg;
+const cx=W/2, cy=H*0.45;
+// wordmark units: cap height 100
+const s=Math.min(W*0.72,300)/ (95+32+100+32+82+22+80); // scale
+const ox=cx-(95+32+100+32+82+22+80)*s/2, oy=cy-50*s;
+const sw=17;
+const rings=[1,1.9,2.9,4.1,5.5,7.2].map(k=>`<circle cx="${cx}" cy="${cy}" r="${55*s*k}" fill="none" stroke="${C.ring}" stroke-width="${k<2?1.2:1}"/>`).join('');
+const L=(x,d)=>`<path transform="translate(${ox+x*s} ${oy}) scale(${s})" d="${d}" fill="none" stroke="${C.fg}" stroke-width="${sw}" stroke-linejoin="miter" stroke-linecap="butt"/>`;
+const oX=95+32, oC=oX+50;
+const reticle=`<g transform="translate(${ox+oC*s} ${oy+50*s}) scale(${s})" fill="none" stroke="${C.fg}">
+ <circle r="${50-sw/2}" stroke-width="${sw}"/>
+ <path d="M0 -${50-sw} V-12 M0 ${50-sw} V12 M-${50-sw} 0 H-12 M${50-sw} 0 H12" stroke-width="3.2"/>
+ <circle r="3.6" fill="${C.fg}" stroke="none"/>
+ <path d="M0 -50 V-64 M0 50 V64 M-50 0 H-62 M50 0 H62" stroke-width="5"/></g>`;
+const word=L(0,'M8.5 8.5 H46 A41.5 41.5 0 0 1 46 91.5 H8.5 Z')+reticle+L(95+32+100+32,'M8.5 100 V8.5 H52 A23 23 0 0 1 52 54.5 H8.5')+L(95+32+100+32+82+22,'M80 8.5 H8.5 V91.5 H80 M8.5 50 H64');
+const capY=oy+100*s+46;
+const fs=Math.round(W*0.034);
+let ticks='';const rw=Math.min(W*0.42,170),ry=H-Math.max(96,H*0.11);
+for(let i=0;i<=10;i++){const x=cx-rw/2+rw*i/10,h=i%5===0?12:6;ticks+=`<path d="M${x} ${ry-h/2}V${ry+h/2}" stroke="${C.tick}" stroke-width="1.4"/>`}
+ticks+=`<path d="M${cx-rw/2} ${ry}H${cx+rw/2}" stroke="${C.tick}" stroke-width="1"/>`;
+document.getElementById('root').outerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">
+<rect width="${W}" height="${H}" fill="${C.bg}"/>${rings}${word}
+<text x="${cx}" y="${capY}" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="600" font-size="${fs}" letter-spacing="${fs*0.32}" fill="${C.cap}">ДНЕВНИК СТРЕЛКА</text>
+${ticks}</svg>`;
+</script></body></html>

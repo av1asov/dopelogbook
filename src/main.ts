@@ -8,4 +8,13 @@ for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
   document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
 }
 
-bootstrapApplication(App, appConfig).catch((err) => console.error(err));
+// Until Angular takes over app-root, the splash stays there; on failure it gives way to a reason.
+bootstrapApplication(App, appConfig).catch((err) => {
+  console.error(err);
+  const root = document.querySelector('app-root');
+  if (root) {
+    root.innerHTML =
+      '<p style="padding: 24px 16px; font-size: 16px">' +
+      'Не удалось запустить приложение. Закройте его и откройте снова.</p>';
+  }
+});
