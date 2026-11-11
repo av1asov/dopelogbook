@@ -8,13 +8,17 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { PhotoMarks } from '../core/ballistics';
+import { fmt, PhotoMarks, Point } from '../core/ballistics';
 import { DiaryStore } from '../core/data/diary-store';
-import { holeRadiusPx } from '../core/target/measure';
+import { SettingsStore } from '../core/data/settings-store';
+import { holeRadiusPx, marksOverlay } from '../core/target/measure';
 import { PhotoActions } from './photo-actions';
-import { Marker, TargetView } from './target-view';
+import { Box, Marker, Segment, TargetView } from './target-view';
 
 const CLOSE_DISTANCE = 90;
+const MARKS_SHOWN = 'photoMarksShown';
+/** How far the number of a target on a sheet sits from its point of aim, mm. */
+const NUMBER_OFFSET_MM = 30;
 
 /** Screen 15г: a target photo with its marks; closes with a swipe down. */
 @Component({
@@ -39,6 +43,11 @@ const CLOSE_DISTANCE = 90;
             <span>{{ text }}</span>
           }
         </span>
+        @if (marks()) {
+          <button type="button" class="layer" [attr.aria-pressed]="shown()" (click)="toggleMarks()">
+            Разметка{{ shown() ? ' ✓' : '' }}
+          </button>
+        }
       </header>
 
       <div class="stage">
@@ -49,21 +58,55 @@ const CLOSE_DISTANCE = 90;
             [width]="shot.width"
             [height]="shot.height"
             [aspect]="shot.width / shot.height"
-            [markers]="markers()"
+            [markers]="shown() ? markers() : []"
+            [segments]="shown() ? segments() : []"
+            [zoomOnDoubleTap]="true"
+            [focus]="focus()"
           />
         }
       </div>
 
-      @if (group() || offsetText()) {
+      @if (marks()) {
+        <div class="legend" aria-hidden="true">
+          <span>
+            <svg viewBox="0 0 12 12"><path d="M6 0v12M0 6h12" stroke="#f1c40f" /></svg>
+            точка прицеливания
+          </span>
+          <span>
+            <svg viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="#e8743b" /></svg>
+            СТП
+          </span>
+          <span>
+            <svg viewBox="0 0 14 12">
+              <path d="M1 11L13 1" stroke="#5aa0ff" stroke-dasharray="3 2" />
+            </svg>
+            группа
+          </span>
+          <span>щипок — увеличить</span>
+        </div>
+        @if (group() || offsetText()) {
+          <p class="result">
+            @if (group(); as text) {
+              группа <b class="num">{{ text }}</b>
+            }
+            @if (group() && offsetText()) {
+              ·
+            }
+            @if (offsetText(); as text) {
+              СТП <b class="num">{{ text }}</b>
+            }
+          </p>
+        } @else if (sheetGroups(); as text) {
+          <p class="result">
+            группы <b class="num">{{ text }}</b>
+          </p>
+        }
+      } @else {
         <p class="result">
-          @if (group(); as text) {
-            группа <b class="num">{{ text }}</b>
-          }
-          @if (group() && offsetText()) {
+          Не размечено
+          @if (canMeasure()) {
             ·
-          }
-          @if (offsetText(); as text) {
-            СТП <b class="num">{{ text }}</b>
+            <button type="button" class="mark-up" (click)="measure.emit()">Разметить ›</button>
           }
         </p>
       }
@@ -94,7 +137,59 @@ const CLOSE_DISTANCE = 90;
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
+      gap: 8px;
       padding: 6px 16px;
+    }
+
+    .layer {
+      justify-self: end;
+      min-height: 34px;
+      padding: 0 10px;
+      border: 1.5px solid #56605a;
+      border-radius: 999px;
+      background: transparent;
+      color: #b9c2bb;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .layer[aria-pressed='true'] {
+      border-color: #f1c40f;
+      color: #f1c40f;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 4px 12px;
+      padding: 8px 16px 0;
+      color: #b9c2bb;
+      font-size: 12px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .legend svg {
+      width: 12px;
+      height: 12px;
+      fill: none;
+      stroke-width: 2;
+    }
+
+    .mark-up {
+      min-height: 44px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #f1c40f;
+      font-size: 14px;
+      font-weight: 600;
     }
 
     .close {
@@ -176,24 +271,84 @@ export class PhotoViewer {
   readonly retake = output<File>();
   readonly remove = output<void>();
 
+  private readonly settings = inject(SettingsStore);
+
   protected readonly image = signal<{ url: string; width: number; height: number } | null>(null);
+  /** The marks layer; it is drawn from the stored marks, never into the photo. */
+  protected readonly shown = signal(true);
+  private readonly overlay = computed(() => {
+    const marks = this.marks();
+    return marks ? marksOverlay(marks) : [];
+  });
+  private readonly sheet = computed(() => this.overlay().length > 1);
+
   protected readonly markers = computed((): Marker[] => {
     const marks = this.marks();
     const holeMm = this.holeMm();
-    return (marks?.targets ?? []).flatMap((target) =>
-      target.holes.map(({ x, y, cold }) => ({
+    if (!marks) return [];
+    return this.overlay().flatMap((target): Marker[] => {
+      const list: Marker[] = target.holes.map(({ x, y, cold }) => ({
         x,
         y,
-        r: holeMm ? holeRadiusPx(marks!, { x, y }, holeMm) : undefined,
+        r: holeMm ? holeRadiusPx(marks, { x, y }, holeMm) : undefined,
         kind: cold ? 'cold' : 'found',
-      })),
-    );
+      }));
+      if (target.aim) list.push({ ...target.aim, kind: 'aim' });
+      if (target.centre) list.push({ ...target.centre, kind: 'centre' });
+      const anchor = target.aim ?? target.centre;
+      if (this.sheet() && anchor) {
+        const gap = holeRadiusPx(marks, anchor, NUMBER_OFFSET_MM * 2) * Math.SQRT1_2;
+        list.push({
+          x: anchor.x - gap,
+          y: anchor.y - gap,
+          kind: 'number',
+          label: String(target.n),
+        });
+      }
+      return list;
+    });
   });
+
+  protected readonly segments = computed((): Segment[] =>
+    this.overlay().flatMap((target): Segment[] => {
+      const list: Segment[] = [];
+      if (target.pair && target.group != null) {
+        const [a, b] = target.pair;
+        list.push({ a, b, kind: 'group', label: `${fmt(target.group, 0)} мм` });
+      }
+      if (target.aim && target.centre)
+        list.push({ a: target.aim, b: target.centre, kind: 'offset' });
+      return list;
+    }),
+  );
+
+  /** The holes and the points of aim, for a double tap to zoom to. */
+  protected readonly focus = computed((): Box | null => {
+    const points: Point[] = this.overlay().flatMap((t) => [...t.holes, ...(t.aim ? [t.aim] : [])]);
+    if (!points.length) return null;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const [x, y] = [Math.min(...xs), Math.min(...ys)];
+    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  });
+
+  /** «1 · 13 мм  2 · 9 мм» under a sheet. */
+  protected readonly sheetGroups = computed(() =>
+    this.sheet()
+      ? this.overlay()
+          .filter((t) => t.group != null)
+          .map((t) => `${t.n} · ${fmt(t.group, 0)} мм`)
+          .join('  ')
+      : '',
+  );
 
   protected readonly dragged = signal(0);
   private startY: number | null = null;
 
   constructor() {
+    void this.settings.readSetting<boolean>(MARKS_SHOWN).then((shown) => {
+      if (shown === false) this.shown.set(false);
+    });
     effect((onCleanup) => {
       const id = this.photoId();
       this.store.photoRevision();
@@ -222,6 +377,12 @@ export class PhotoViewer {
     const { width, height } = bitmap;
     bitmap.close();
     return { url: URL.createObjectURL(blob), width, height };
+  }
+
+  protected toggleMarks(): void {
+    const shown = !this.shown();
+    this.shown.set(shown);
+    void this.settings.writeSetting(MARKS_SHOWN, shown);
   }
 
   protected start(event: TouchEvent): void {

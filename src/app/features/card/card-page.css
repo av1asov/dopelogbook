@@ -1,9 +1,9 @@
-/* The card stays paper-coloured in both themes: it is read like a printed sheet. */
+/* The card follows the theme; only the exported PNG is always black on white. */
 :host {
   display: block;
   min-height: 100%;
-  background: #fbfbf8;
-  color: #151815;
+  background: var(--card-paper);
+  color: var(--ink);
 }
 
 .page {
@@ -17,7 +17,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 16px;
-  border-bottom: 3px solid #151815;
+  border-bottom: 3px solid var(--ink);
 }
 
 .names {
@@ -39,7 +39,7 @@
 }
 
 .specs {
-  color: #4c5650;
+  color: var(--ink-2);
   font-size: 13px;
 }
 
@@ -47,10 +47,10 @@
   flex: none;
   min-height: 44px;
   padding: 6px 10px;
-  border: 1.5px solid #151815;
+  border: 1.5px solid var(--ink);
   border-radius: 6px;
-  background: #fbfbf8;
-  color: #151815;
+  background: var(--card-paper);
+  color: var(--ink);
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
@@ -74,8 +74,8 @@
 
 .titles {
   padding: 8px 0 6px;
-  border-bottom: 1.5px solid #151815;
-  color: #4c5650;
+  border-bottom: 1.5px solid var(--ink);
+  color: var(--ink-2);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -88,11 +88,11 @@
 
 .data {
   padding: 9px 0;
-  border-bottom: 1px solid #d5d8cf;
+  border-bottom: 1px solid var(--rule);
 }
 
 .shade {
-  background: #eef0ea;
+  background: var(--card-shade);
 }
 
 .dist {
@@ -111,26 +111,26 @@
 }
 
 .est {
-  color: #5f665f;
+  color: var(--ink-2);
   font-weight: 500;
 }
 
 .wind {
-  color: #4c5650;
+  color: var(--ink-2);
   font-size: 20px;
 }
 
 .foot,
 .note {
   margin: 8px 0 0;
-  color: #4c5650;
+  color: var(--ink-2);
   font-size: 13px;
 }
 
 .note.warn {
   padding: 4px 8px;
-  border-left: 3px solid #a0560f;
-  color: #a0560f;
+  border-left: 3px solid var(--warn);
+  color: var(--warn);
 }
 
 .empty {
@@ -138,12 +138,12 @@
   flex-direction: column;
   gap: 8px;
   padding: 16px 0;
-  color: #4c5650;
+  color: var(--ink-2);
   font-size: 14px;
 }
 
 .empty b {
-  color: #151815;
+  color: var(--ink);
   font-size: 17px;
 }
 
@@ -158,19 +158,21 @@
   flex: 1;
   min-height: 48px;
   padding: 0 12px;
-  border: 2px solid #151815;
+  border: 2px solid var(--ink);
   border-radius: 8px;
-  color: #151815;
+  color: var(--ink);
   font-size: 16px;
   font-weight: 700;
 }
 
 .primary {
-  background: #f1c40f;
+  border-color: var(--mark-ink);
+  background: var(--mark);
+  color: var(--mark-ink);
 }
 
 .secondary {
-  background: #fbfbf8;
+  background: var(--card-paper);
 }
 
 .png {

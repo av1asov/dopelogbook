@@ -45,7 +45,7 @@ export interface Marker extends Point {
 export interface Segment {
   a: Point;
   b: Point;
-  kind: 'scale' | 'ruler' | 'spread' | 'offset' | 'edge';
+  kind: 'scale' | 'ruler' | 'spread' | 'group' | 'offset' | 'edge';
   label?: string;
 }
 
@@ -65,6 +65,21 @@ const LOUPE_ZOOM = 3;
 const LOUPE_GAP = 28;
 const LOUPE_MARGIN = 4;
 const MAX_ZOOM = 10;
+const DOUBLE_TAP_MS = 300;
+const TAP_MS = 250;
+const TAP_SLOP = 12;
+/** A double tap away from any group zooms this much. */
+const TAP_ZOOM = 2.5;
+/** Room around the group zoomed to, as a share of its size. */
+const FOCUS_MARGIN = 0.8;
+
+/** A box on the image, in its pixels. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /** A photo with marks on top: one finger marks, two fingers pinch and pan. See mark-gesture. */
 @Component({
@@ -95,6 +110,8 @@ const MAX_ZOOM = 10;
         @if (s.label; as label) {
           <text
             [class.ruler]="s.kind === 'ruler'"
+            [class.group]="s.kind === 'group'"
+            [attr.stroke-width]="s.kind === 'group' ? unit() * 4 : null"
             [attr.x]="(s.a.x + s.b.x) / 2"
             [attr.y]="(s.a.y + s.b.y) / 2 - unit() * 8"
             [attr.font-size]="unit() * 13"
@@ -184,6 +201,9 @@ export class TargetView {
   readonly full = input(false);
   /** Width over height of the frame. */
   readonly aspect = input(1);
+  /** A double tap fits the photo back or zooms to this box (to the tap, without one). */
+  readonly zoomOnDoubleTap = input(false);
+  readonly focus = input<Box | null>(null);
 
   readonly added = output<TargetTap>();
   readonly refused = output<void>();
@@ -229,6 +249,8 @@ export class TargetView {
   private pinch: { gap: number; mid: Point; view: { cx: number; cy: number; s: number } } | null =
     null;
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private press: { x: number; y: number; t: number } | null = null;
+  private lastTap: { x: number; y: number; t: number } | null = null;
 
   constructor() {
     effect(() => {
@@ -273,6 +295,8 @@ export class TargetView {
     this.svg().nativeElement.setPointerCapture(event.pointerId);
     this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     clearTimeout(this.timer);
+    this.press =
+      this.pointers.size === 1 ? { x: event.clientX, y: event.clientY, t: event.timeStamp } : null;
     if (this.pointers.size === 2) {
       this.endGesture();
       this.startPinch();
@@ -323,6 +347,10 @@ export class TargetView {
   protected up(event: PointerEvent): void {
     this.pointers.delete(event.pointerId);
     clearTimeout(this.timer);
+    if (this.zoomOnDoubleTap() && this.isTap(event)) {
+      this.endGesture();
+      return;
+    }
     if (this.pinch) {
       if (this.pointers.size < 2) this.pinch = null;
       return;
@@ -337,6 +365,47 @@ export class TargetView {
     clearTimeout(this.timer);
     this.endGesture();
     this.pinch = null;
+  }
+
+  /** A short touch that hardly moved; the second one in a row zooms. */
+  private isTap(event: PointerEvent): boolean {
+    const press = this.press;
+    this.press = null;
+    if (this.pinch || !press || this.pointers.size) return false;
+    const still = Math.hypot(event.clientX - press.x, event.clientY - press.y) < TAP_SLOP;
+    if (!still || event.timeStamp - press.t > TAP_MS) return false;
+    const last = this.lastTap;
+    const second =
+      last &&
+      event.timeStamp - last.t < DOUBLE_TAP_MS &&
+      Math.hypot(event.clientX - last.x, event.clientY - last.y) < TAP_SLOP * 3;
+    if (!second) {
+      this.lastTap = { x: event.clientX, y: event.clientY, t: event.timeStamp };
+      return true;
+    }
+    this.lastTap = null;
+    this.toggleZoom(this.toImage(event.clientX, event.clientY));
+    return true;
+  }
+
+  /** Back to the whole photo, or in: to the focus box, or to the point tapped. */
+  private toggleZoom(at: Point): void {
+    const whole = this.side();
+    if (this.view().s < whole * 0.98) {
+      this.view.set({ cx: this.width() / 2, cy: this.height() / 2, s: whole });
+      return;
+    }
+    const focus = this.focus();
+    const centre = focus ? { x: focus.x + focus.w / 2, y: focus.y + focus.h / 2 } : at;
+    const fitted = focus
+      ? Math.max(focus.w, focus.h * this.aspect()) * (1 + FOCUS_MARGIN)
+      : whole / TAP_ZOOM;
+    const s = Math.min(whole, Math.max(whole / MAX_ZOOM, fitted));
+    this.view.set({
+      cx: this.clamp(centre.x, this.width(), s),
+      cy: this.clamp(centre.y, this.height(), s / this.aspect()),
+      s,
+    });
   }
 
   private endGesture(): void {

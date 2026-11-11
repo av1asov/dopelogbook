@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import {
   ammoById,
+  ammoChipName,
   ammoName,
   CleanRef,
   Diary,
@@ -62,6 +63,7 @@ import {
   offsetShort,
   SeriesOption,
   SeriesResult,
+  showsSeries,
   turnPlane,
   turnPoint,
 } from '../../core/target/measure';
@@ -116,7 +118,15 @@ export function measureContext(
   const series = all.flatMap((x, i): SeriesOption[] => {
     if (x.kind === 'zeroing') return [];
     count++;
-    const label = `серия ${count}${x.dist != null ? ` · ${x.dist} м` : ''}`;
+    const photo = (session.photos ?? []).some((p) => showsSeries(p, i));
+    const label = [
+      `серия ${count}`,
+      x.dist != null ? `${x.dist} м` : '',
+      ammoChipName(ammoName(ammoById(diary, x.ammoId))),
+      photo ? 'есть фото' : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
     return [{ si: i, number: count, label, filled: x.group != null }];
   });
   return {

@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { map } from 'rxjs';
 import {
   ammoById,
@@ -56,6 +57,8 @@ import { withMeasurement } from '../../core/target/measure';
 import { MeasureApplied, measureContext, PhotoMeasure } from '../photo-measure/photo-measure';
 import { SignedInput } from '../../shared/signed-input';
 import { Stepper } from '../../shared/stepper';
+import { RangeFinish } from './range-finish';
+import { SaveAlerts } from './save-alerts';
 import { SeriesPicker } from './series-picker';
 
 const text = (value = '') => new FormControl(value, { nonNullable: true });
@@ -66,19 +69,46 @@ const DIST_STEP = 25;
 const WIND_STEP = 1;
 const ZEROING_SHOTS = 3;
 const CAMERA_HINT = 'cameraHintShown';
+const DRAFT = 'rangeDraft';
+/** Once per app session: sessionStorage outlives a reload but not a closed app. */
+const BACKUP_REMINDED = 'dope.backupReminded';
+const TOAST_MS = 4000;
 
 type DraftPhoto = Omit<PhotoRef, 'si'>;
 
+/** Shots and hits the series started with: a change to them fills the draft. */
+interface Baseline {
+  shots: number;
+  hits: number;
+}
+
+/** The series being entered. It is written to the database on every change. */
 interface RangeDraft {
   sessionId: string;
   value: Record<string, unknown>;
   /** A plain id in drafts saved before photos could carry marks. */
   photos: (string | DraftPhoto)[];
+  /** Absent in drafts saved before the draft could be told empty from filled. */
+  base?: Baseline;
+}
+
+interface SavedToast {
+  text: string;
+  /** The session and the series as they were before «Сохранить». */
+  undo: { session: Session; value: RangeDraft['value']; photos: DraftPhoto[]; base: Baseline };
 }
 
 @Component({
   selector: 'app-range-session',
-  imports: [PhotoMeasure, ReactiveFormsModule, SeriesPicker, SignedInput, Stepper],
+  imports: [
+    PhotoMeasure,
+    RangeFinish,
+    ReactiveFormsModule,
+    SaveAlerts,
+    SeriesPicker,
+    SignedInput,
+    Stepper,
+  ],
   templateUrl: './range-session.html',
   styleUrl: './range-session.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -87,6 +117,7 @@ export class RangeSession implements OnInit {
   private readonly store = inject(DiaryStore);
   private readonly settings = inject(SettingsStore);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
 
   readonly session = input.required<Session>();
 
@@ -119,14 +150,20 @@ export class RangeSession implements OnInit {
   });
 
   protected readonly pickerOpen = signal(false);
-  protected readonly confirmingFinish = signal(false);
+  /** Screen 1г, with the record as it will be saved. */
+  protected readonly finishing = signal<Session | null>(null);
   protected readonly photos = signal<DraftPhoto[]>([]);
   /** A new shot being marked up; it reaches the store only when applied or kept. */
   protected readonly measuring = signal<{ id: string; shot: Blob } | null>(null);
   protected readonly cameraHint = signal(false);
   protected readonly photoBusy = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly online = signal(navigator.onLine);
+  /** A write to the database failed; the banner offers to try it again. */
+  protected readonly retry = signal<(() => Promise<unknown>) | null>(null);
+  protected readonly backupReminder = signal(false);
+  protected readonly toast = signal<SavedToast | null>(null);
+  private toastTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly base = signal<Baseline>({ shots: 5, hits: 5 });
 
   private readonly value = toSignal(
     this.form.valueChanges.pipe(map(() => this.form.getRawValue())),
@@ -185,6 +222,19 @@ export class RangeSession implements OnInit {
   private readonly draftSeries = computed((): Series => this.toSeries(this.value()));
 
   private readonly draftIndex = computed(() => this.session().series.length);
+
+  /** A result was entered: such a draft is saved on «Завершить», an empty one is dropped. */
+  protected readonly filled = computed(() => {
+    const v = this.value();
+    const base = this.base();
+    // A zeroing series of no shots is not recorded, so it cannot be a filled draft either.
+    if (this.zeroing()) {
+      return v.shots > 0 && (v.shots !== base.shots || v.clicksUp !== 0 || v.clicksRight !== 0);
+    }
+    if (v.shots !== base.shots || this.photos().length) return true;
+    const typed = [v.group, v.offUp, v.offRight].some((field) => field.trim() !== '');
+    return typed || v.hits !== base.hits || v.cold;
+  });
 
   protected readonly measureContext = computed(() =>
     measureContext(this.store.diary(), this.rifle(), this.session(), {
@@ -333,13 +383,17 @@ export class RangeSession implements OnInit {
         if (corr) this.windCorrLeft = corr < 0;
       });
 
+    this.destroyRef.onDestroy(() => clearTimeout(this.toastTimer));
     this.cameraHint.set(!(await this.settings.readSetting<boolean>(CAMERA_HINT)));
-    const draft = await this.settings.readSetting<RangeDraft>('rangeDraft');
+    const draft = await this.settings.readSetting<RangeDraft>(DRAFT);
     if (draft?.sessionId === this.session().id) {
+      const defaults = this.defaultsFor(this.session());
       this.form.patchValue(draft.value);
       this.photos.set(draft.photos.map((p) => (typeof p === 'string' ? { id: p } : p)));
+      const shots = defaults.shots ?? 5;
+      this.base.set(draft.base ?? { shots, hits: shots });
       if (!this.picks.controls.scopeId.value) {
-        this.picks.controls.scopeId.setValue(this.defaultsFor(this.session()).scopeId);
+        this.picks.controls.scopeId.setValue(defaults.scopeId);
       }
     } else {
       this.applyDefaults();
@@ -347,14 +401,19 @@ export class RangeSession implements OnInit {
     this.form.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => void this.storeDraft());
+    void this.remindBackup();
+  }
 
-    const updateOnline = () => this.online.set(navigator.onLine);
-    window.addEventListener('online', updateOnline);
-    window.addEventListener('offline', updateOnline);
-    this.destroyRef.onDestroy(() => {
-      window.removeEventListener('online', updateOnline);
-      window.removeEventListener('offline', updateOnline);
-    });
+  /** Storage the browser may clear: a reminder to keep a copy, once per app session. */
+  private async remindBackup(): Promise<void> {
+    try {
+      if (sessionStorage.getItem(BACKUP_REMINDED)) return;
+      if ((await navigator.storage?.persisted?.()) !== false) return;
+      sessionStorage.setItem(BACKUP_REMINDED, '1');
+      this.backupReminder.set(true);
+    } catch {
+      // Without sessionStorage or the storage API there is nothing to go by.
+    }
   }
 
   /** Keeps the angle already entered: the same correction, in the new scope's units. */
@@ -515,59 +574,144 @@ export class RangeSession implements OnInit {
   }
 
   private async saveAndContinue(session: Session): Promise<void> {
-    this.error.set(null);
     let saved: Session;
     try {
       saved = await this.store.save('session', session);
     } catch {
-      this.error.set('Не удалось сохранить серию.');
+      this.failed(() => this.saveAndContinue(session));
       return;
     }
+    this.retry.set(null);
     this.resetForm(this.defaultsFor(saved));
     this.sourceNote.set('');
     await this.storeDraft();
     document.querySelector('.content')?.scrollTo(0, 0);
   }
 
+  /** «Сохранить серию N»: the series joins the record and an empty draft of the next opens. */
   protected async saveSeries(): Promise<void> {
     const session = this.session();
-    const si = session.series.length;
     const number = this.seriesNumber();
-    const v = this.form.getRawValue();
-    const series = this.toSeries(v);
-    this.error.set(null);
+    const value = this.form.getRawValue();
+    const photos = this.photos();
+    const base = this.base();
+    const series = this.toSeries(value);
     try {
-      await this.store.save('session', {
-        ...session,
-        series: [...session.series, series],
-        photos: [...(session.photos ?? []), ...this.photos().map((photo) => ({ ...photo, si }))],
-        ...(si === 0 && v.cold
-          ? {
-              coldShot: compact({
-                si,
-                offUp: parseNum(v.coldUp),
-                offRight: parseNum(v.coldRight),
-              }),
-            }
-          : {}),
-      });
+      await this.store.save('session', this.withDraft(session));
     } catch {
-      this.error.set('Не удалось сохранить серию.');
+      this.failed(() => this.saveSeries());
       return;
     }
+    this.retry.set(null);
     this.photos.set([]);
     this.resetForm(nextSeriesDefaults(series));
     this.sourceNote.set(`как в серии ${number}`);
     await this.storeDraft();
     document.querySelector('.content')?.scrollTo(0, 0);
+    this.showToast({
+      text: `Серия ${number} сохранена`,
+      undo: { session, value, photos, base },
+    });
   }
 
-  protected async finish(): Promise<void> {
-    const { open: _open, zeroing: _zeroing, ...session } = this.session();
-    await this.settings.writeSetting('rangeDraft', null);
-    for (const { id } of this.photos()) await this.store.removePhoto(id);
-    if (session.series.length) await this.store.save('session', session);
-    else await this.store.remove('session', session.id);
+  /** Takes the series back out of the record and into the form, as it was. */
+  protected async undoSave(): Promise<void> {
+    const undo = this.toast()?.undo;
+    this.hideToast();
+    if (undo) await this.restore(undo);
+  }
+
+  private async restore(undo: SavedToast['undo']): Promise<void> {
+    try {
+      await this.store.save('session', undo.session);
+    } catch {
+      this.failed(() => this.restore(undo));
+      return;
+    }
+    this.form.reset(undo.value);
+    this.photos.set(undo.photos);
+    this.base.set(undo.base);
+    this.sourceNote.set('');
+    await this.storeDraft();
+  }
+
+  /** The record with the draft as its next series, as «Сохранить серию» would leave it. */
+  private withDraft(session: Session): Session {
+    if (session.zeroing) {
+      const series = this.toZeroingSeries(session.zeroing);
+      return series ? { ...session, series: [...session.series, series] } : session;
+    }
+    const si = session.series.length;
+    const v = this.form.getRawValue();
+    return {
+      ...session,
+      series: [...session.series, this.toSeries(v)],
+      photos: [...(session.photos ?? []), ...this.photos().map((photo) => ({ ...photo, si }))],
+      ...(si === 0 && v.cold
+        ? {
+            coldShot: compact({
+              si,
+              offUp: parseNum(v.coldUp),
+              offRight: parseNum(v.coldRight),
+            }),
+          }
+        : {}),
+    };
+  }
+
+  /** Screen 1г: the record as «Завершить» will leave it. */
+  protected openFinish(): void {
+    this.hideToast();
+    this.finishing.set(this.filled() ? this.withDraft(this.session()) : this.session());
+  }
+
+  /** Saves a filled draft, drops an empty one and closes the record. */
+  protected async finish(notes: string): Promise<void> {
+    const preview = this.finishing();
+    if (!preview) return;
+    const { open: _open, zeroing: _zeroing, notes: _notes, ...closed } = preview;
+    const text = notes.trim();
+    this.finishing.set(null);
+    await this.close({ ...closed, ...(text ? { notes: text } : {}) });
+  }
+
+  /**
+   * The draft goes first: once the record is closed this screen is gone, and a draft left
+   * behind would come back as a duplicate series when the record is reopened.
+   */
+  private async close(session: Session): Promise<void> {
+    try {
+      await this.settings.writeSetting(DRAFT, null);
+      if (session.series.length) await this.store.save('session', session);
+      else await this.store.remove('session', session.id);
+    } catch {
+      // The record is still open: the draft goes back, and «Повторить» closes it as it was.
+      await this.storeDraft();
+      this.failed(() => this.close(session));
+      return;
+    }
+    await this.router.navigate(session.series.length ? ['/journal', session.id] : ['/journal']);
+  }
+
+  private failed(retry: () => Promise<unknown>): void {
+    this.retry.set(retry);
+  }
+
+  protected async retryWrite(): Promise<void> {
+    const retry = this.retry();
+    this.retry.set(null);
+    await retry?.();
+  }
+
+  private showToast(toast: SavedToast): void {
+    clearTimeout(this.toastTimer);
+    this.toast.set(toast);
+    this.toastTimer = setTimeout(() => this.toast.set(null), TOAST_MS);
+  }
+
+  private hideToast(): void {
+    clearTimeout(this.toastTimer);
+    this.toast.set(null);
   }
 
   private applyDefaults(): void {
@@ -591,6 +735,7 @@ export class RangeSession implements OnInit {
 
   private resetForm(defaults: SeriesDefaults): void {
     const shots = defaults.shots ?? 5;
+    this.base.set({ shots, hits: shots });
     const scope = scopeById(this.store.diary(), defaults.scopeId);
     this.form.reset({
       picks: {
@@ -652,12 +797,17 @@ export class RangeSession implements OnInit {
     });
   }
 
-  private storeDraft(): Promise<void> {
+  private async storeDraft(): Promise<void> {
     const draft: RangeDraft = {
       sessionId: this.session().id,
       value: this.form.getRawValue(),
       photos: this.photos(),
+      base: this.base(),
     };
-    return this.settings.writeSetting('rangeDraft', draft);
+    try {
+      await this.settings.writeSetting(DRAFT, draft);
+    } catch {
+      this.failed(() => this.storeDraft());
+    }
   }
 }

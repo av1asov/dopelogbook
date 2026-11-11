@@ -1,6 +1,7 @@
 import { mainScope, sessionsOf } from './diary';
-import { zeroInfo } from './dope';
-import { Diary, Rifle, Series, ZeroingPlan } from './model';
+import { afterZero, dopePoints, zeroInfo } from './dope';
+import { Diary, Rifle, Series, Session, ZeroingPlan } from './model';
+import { elevEff, seriesStatus, sessionRounds } from './series';
 
 export type SeriesDefaults = Pick<
   Series,
@@ -65,4 +66,54 @@ export function recentPlaces(d: Diary, limit = 3): string[] {
 export function altitudeAt(d: Diary, place: string): number | null {
   const session = sessionsOf(d).find((s) => s.place === place && s.altitude != null);
   return session?.altitude ?? null;
+}
+
+/** Distances of one DOPE card that a session now supplies. */
+export interface CardUpdate {
+  ammoId: string;
+  scopeId: string;
+  dists: number[];
+}
+
+/** The diary with `session` in place of its stored copy, or added to it. */
+export function withSession(d: Diary, session: Session): Diary {
+  const others = d.sessions.filter((s) => s.id !== session.id);
+  return { ...d, sessions: [...others, session] };
+}
+
+/**
+ * The card points the session gives, card by card in the order of its series: those where its
+ * series, rather than an older or a later one, is now the point of the card.
+ */
+export function cardUpdates(d: Diary, session: Session): CardUpdate[] {
+  const diary = withSession(d, session);
+  const cards = new Map<string, CardUpdate>();
+  session.series.forEach((x) => {
+    if (!seriesStatus(x).use) return;
+    const key = `${x.ammoId}|${x.scopeId}`;
+    if (!cards.has(key)) cards.set(key, { ammoId: x.ammoId, scopeId: x.scopeId, dists: [] });
+  });
+  return [...cards.values()].flatMap((card) => {
+    const zero = zeroInfo(diary, session.rifleId, card.scopeId);
+    const latest = new Map<number, number>();
+    session.series.forEach((x, si) => {
+      const same = x.ammoId === card.ammoId && x.scopeId === card.scopeId;
+      if (same && seriesStatus(x).use && afterZero(session, si, zero)) {
+        latest.set(x.dist as number, elevEff(x) as number);
+      }
+    });
+    const points = dopePoints(diary, session.rifleId, card.scopeId, card.ammoId).elev;
+    const dists = points
+      .filter((p) => p.date === session.date && latest.get(p.d) === p.v)
+      .map((p) => p.d);
+    return dists.length ? [{ ...card, dists }] : [];
+  });
+}
+
+/** Rounds through the barrel over all its sessions, `session` taken as it is given. */
+export function barrelRounds(d: Diary, session: Session): number {
+  return sessionsOf(withSession(d, session), session.rifleId).reduce(
+    (sum, s) => sum + sessionRounds(s),
+    0,
+  );
 }

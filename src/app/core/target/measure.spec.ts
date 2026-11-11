@@ -14,6 +14,7 @@ import {
   caliberMm,
   defaultSeries,
   fitLayout,
+  marksOverlay,
   holeRadiusPx,
   matchesLayout,
   measuredSeries,
@@ -56,6 +57,34 @@ const MOCKUP: PhotoTarget = {
   ],
 };
 const marks = { scale: manualScale };
+const auto2 = ({ x, y }: Point) => ({ x, y, auto: true });
+
+describe('marksOverlay', () => {
+  it('finds the mean, the two farthest holes and leaves the cold shot out', () => {
+    const [overlay] = marksOverlay({
+      ...marks,
+      targets: [
+        { ...MOCKUP, holes: [...MOCKUP.holes, { x: 400, y: 400, auto: true, cold: true }] },
+      ],
+    });
+    const plain = measureTarget(marks, MOCKUP);
+    expect(overlay.group).toBeCloseTo(plain.group!, 6);
+    expect(overlay.pair).toEqual([
+      { x: 160, y: 250, auto: true },
+      { x: 262, y: 186, auto: true },
+    ]);
+    expect(overlay.centre!.x).toBeCloseTo((160 + 262 + 214 + 205 + 209) / 5, 6);
+    expect(overlay.aim).toEqual(MOCKUP.aim);
+    expect(overlay.holes).toHaveLength(6);
+  });
+
+  it('has no group with a single hole', () => {
+    const [overlay] = marksOverlay({ ...marks, targets: [{ n: 1, holes: [auto([1, 2])] }] });
+    expect(overlay.group).toBeNull();
+    expect(overlay.pair).toBeNull();
+    expect(overlay.aim).toBeNull();
+  });
+});
 
 describe('measureTarget', () => {
   it('reproduces the mockup: 5 holes, 25 mm = 60 px', () => {
@@ -215,6 +244,28 @@ describe('perspective', () => {
     expect(corner.x).toBeCloseTo(840, 6);
     expect(corner.y).toBeCloseTo(780, 6);
     expect(pxPerMmAt(h, { x: 50, y: 50 })).toBeGreaterThan(5);
+  });
+
+  it('draws the mean and the spread found on the target, not on the photo', () => {
+    const { project } = camera(30);
+    const h = homography(rectangle(210, 297).map(project), rectangle(210, 297))!;
+    const onTarget = [
+      { x: 90, y: 130 },
+      { x: 120, y: 130 },
+      { x: 105, y: 170 },
+    ];
+    const cold = { ...project({ x: 20, y: 20 }), auto: true, cold: true };
+    const [overlay] = marksOverlay({
+      scale: manualScale,
+      homography: [...h],
+      targets: [{ n: 1, si: 2, aim: null, holes: [...onTarget.map(project).map(auto2), cold] }],
+    });
+    const centre = toMillimetres({ scale: manualScale, homography: [...h] })(overlay.centre!);
+    expect(centre.x).toBeCloseTo(105, 6);
+    expect(centre.y).toBeCloseTo(430 / 3, 6);
+    expect(overlay.group).toBeCloseTo(Math.hypot(15, 40), 6);
+    expect(overlay.pair).toHaveLength(2);
+    expect(overlay.si).toBe(2);
   });
 
   it('rejects collinear corners', () => {

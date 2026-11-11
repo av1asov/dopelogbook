@@ -28,17 +28,16 @@
   font-weight: 800;
 }
 
-.saved {
-  display: inline-flex;
+.finish {
   flex: none;
-  align-items: center;
-  gap: 6px;
-  color: #b9c2bb;
-  font-size: 13px;
-}
-
-.saved circle {
-  fill: #6cc185;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1.5px solid #f1c40f;
+  border-radius: 8px;
+  background: transparent;
+  color: #f1c40f;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .range {
@@ -286,12 +285,6 @@
 .out {
   color: var(--warn);
   font-family: var(--f-body);
-}
-
-.confirm {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .zero-banner {

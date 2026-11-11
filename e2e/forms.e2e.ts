@@ -55,6 +55,17 @@ test('Запись · изменить', async ({ page }) => {
   await expectTidyFields(page, 'Запись · изменить');
 });
 
+test('Запись · + Фото', async ({ page }) => {
+  await openFirst(page, '/journal', 'a.entry');
+  await page.locator('input[type=file][multiple]').setInputFiles(photo());
+  const measure = page.getByRole('dialog', { name: 'Разметка мишени' });
+  await expect(measure).toBeVisible();
+  // Several series without a photo: each target on it picks its series, as on a sheet.
+  await expect(measure.getByText(/Фото листа/)).toBeVisible();
+  await measure.getByRole('button', { name: 'Отмена' }).click();
+  await expect(measure).toBeHidden();
+});
+
 test('Винтовка', async ({ page }) => {
   await openFirst(page, '/more/rifles', 'a.card');
   await expect(page.getByRole('heading', { name: 'Прицелы' })).toBeVisible();

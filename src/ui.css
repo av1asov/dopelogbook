@@ -373,3 +373,32 @@ textarea.input {
 .input.num {
   font-family: var(--f-num);
 }
+
+/* «Серия 3 сохранена · Отменить»: above the tabs, for a moment after an action. */
+.toast {
+  position: fixed;
+  right: 16px;
+  bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  left: 16px;
+  z-index: 23;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 4px 0 14px;
+  border-radius: 8px;
+  background: #1d221f;
+  color: #f5f6f2;
+  font-size: 15px;
+}
+
+.toast button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--mark);
+  font-size: 15px;
+  font-weight: 700;
+}

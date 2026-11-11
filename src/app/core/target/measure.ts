@@ -14,7 +14,7 @@ import {
   TargetTemplate,
   TemplateTarget,
 } from '../ballistics/model';
-import { applyHomography, homography, pxPerMmAt, rectangle } from './homography';
+import { applyHomography, homography, invertHomography, pxPerMmAt, rectangle } from './homography';
 
 export const SHEETS: readonly (readonly [string, SheetSize])[] = [
   ['A4', { w: 210, h: 297 }],
@@ -66,12 +66,22 @@ export const photosWithTemplate = (sessions: readonly Session[], id: string): nu
 
 /** The largest distance between two points. */
 export function spread(points: readonly Point[]): number | null {
+  return farthestPair(points)?.gap ?? null;
+}
+
+/** The two points farthest apart, by their indices. */
+export function farthestPair(
+  points: readonly Point[],
+): { i: number; j: number; gap: number } | null {
   if (points.length < 2) return null;
-  let widest = 0;
+  let best = { i: 0, j: 1, gap: distance(points[0], points[1]) };
   points.forEach((a, i) => {
-    for (const b of points.slice(i + 1)) widest = Math.max(widest, distance(a, b));
+    points.slice(i + 1).forEach((b, k) => {
+      const gap = distance(a, b);
+      if (gap > best.gap) best = { i, j: i + 1 + k, gap };
+    });
   });
-  return widest;
+  return best;
 }
 
 export const meanPoint = (points: readonly Point[]): Point | null =>
@@ -113,6 +123,44 @@ export function measureTarget(
     offset: centre && offsetOf(centre),
     cold: coldHole ? offsetOf(mm(coldHole)) : null,
   };
+}
+
+/** What the photo viewer draws over one target, in the pixels of the original image. */
+export interface TargetOverlay {
+  n: number;
+  si?: number;
+  aim: Point | null;
+  holes: readonly (Point & { cold?: boolean })[];
+  /** Mean point of impact, the cold shot left out. */
+  centre: Point | null;
+  /** The two holes farthest apart, measured on the target rather than on the photo. */
+  pair: [Point, Point] | null;
+  /** The distance between them, mm. */
+  group: number | null;
+}
+
+/** The marks of a photo as they are drawn on it: the mean and the spread are found in mm. */
+export function marksOverlay(marks: PhotoMarks): TargetOverlay[] {
+  const mm = toMillimetres(marks);
+  const inverse = marks.homography && invertHomography(marks.homography);
+  return marks.targets.map((target) => {
+    const inGroup = target.holes.filter((hole) => !hole.cold);
+    const flat = inGroup.map(mm);
+    const far = farthestPair(flat);
+    const pair: [Point, Point] | null = far && [inGroup[far.i], inGroup[far.j]];
+    const mean = meanPoint(flat);
+    // Without perspective the scale is linear, so the mean of the pixels is the same point.
+    const centre = mean && (inverse ? applyHomography(inverse, mean) : meanPoint(inGroup));
+    return {
+      n: target.n,
+      ...(target.si != null ? { si: target.si } : {}),
+      aim: target.aim ?? null,
+      holes: target.holes,
+      centre,
+      pair,
+      group: far?.gap ?? null,
+    };
+  });
 }
 
 /**

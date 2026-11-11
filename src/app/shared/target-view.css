@@ -60,6 +60,19 @@ text.number {
   stroke-dasharray: 3 3;
 }
 
+line.group {
+  stroke: #5aa0ff;
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
+/* The outline is as wide as a few screen pixels: the template sets it by the zoom. */
+text.group {
+  fill: #5aa0ff;
+  stroke: #1d221f;
+  paint-order: stroke;
+}
+
 .offset {
   stroke: #e8743b;
   stroke-width: 1.5;

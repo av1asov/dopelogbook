@@ -163,10 +163,23 @@
       </section>
     }
 
-    <button type="button" class="btn-mark" (click)="resume()">Продолжить на рубеже</button>
-    @if (s.open) {
-      <button type="button" class="btn" (click)="finish()">Завершить стрельбу</button>
+    @if (blocked() && openElsewhere(); as other) {
+      <div class="notice">
+        Сначала завершите стрельбу {{ other }} — она идёт на рубеже.
+        <a routerLink="/range">Перейти на рубеж ›</a>
+      </div>
     }
+    <div class="go">
+      <label class="add-photo" [class.busy]="adding()">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+          <circle cx="12" cy="13" r="3.5" />
+        </svg>
+        {{ adding() ? 'Читаю…' : '+ Фото' }}
+        <input type="file" accept="image/*" multiple hidden (change)="addPhotos($event)" />
+      </label>
+      <button type="button" class="btn-mark" (click)="resume()">На рубеж</button>
+    </div>
 
     @if (confirmingDelete()) {
       <div class="notice confirm">
@@ -197,7 +210,7 @@
     [shot]="m.shot"
     (applied)="applyMeasure($event)"
     (kept)="keepPhoto()"
-    (closed)="measuring.set(null)"
+    (closed)="closeMeasure()"
   />
 }
 
@@ -237,6 +250,16 @@
     (confirmed)="confirmDelete($event)"
     (cancelled)="deleting.set(null)"
   />
+}
+
+@if (question(); as q) {
+  <app-bottom-sheet [heading]="q.heading" (closed)="answer(false)">
+    <p class="question">{{ q.text }}</p>
+    <div class="answers">
+      <button type="button" class="btn-mark" (click)="answer(true)">{{ q.yes }}</button>
+      <button type="button" class="btn" (click)="answer(false)">{{ q.no }}</button>
+    </div>
+  </app-bottom-sheet>
 }
 
 @if (toast(); as t) {
