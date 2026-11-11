@@ -3,12 +3,7 @@
     <span class="conditions">{{ conditions() }}</span>
     <span class="rifle-name">{{ rifle().name }}</span>
   </div>
-  <span class="saved">
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-      <circle cx="5" cy="5" r="4" />
-    </svg>
-    {{ online() ? 'В сети' : 'Без сети' }} · сохранено
-  </span>
+  <button type="button" class="finish" (click)="openFinish()">Завершить</button>
 </header>
 
 @if (zeroing(); as plan) {
@@ -19,6 +14,13 @@
     </span>
   </div>
 }
+
+<app-save-alerts
+  [failed]="!!retry()"
+  [reminder]="backupReminder()"
+  (retry)="retryWrite()"
+  (dismiss)="backupReminder.set(false)"
+/>
 
 <form class="range" [formGroup]="form" (ngSubmit)="submit()" novalidate>
   @if (zeroing()) {
@@ -354,7 +356,7 @@
       <p class="error">{{ message }}</p>
     }
 
-    <button class="btn-mark save" type="submit">Сохранить и следующая серия</button>
+    <button class="btn-mark save" type="submit">Сохранить серию {{ seriesNumber() }}</button>
 
     @if (today().length) {
       <div class="today">
@@ -385,21 +387,26 @@
       </div>
     }
   }
-
-  @if (confirmingFinish()) {
-    <div class="notice confirm">
-      <span>Завершить стрельбу? Незаписанная серия пропадёт.</span>
-      <div class="btn-row">
-        <button type="button" class="btn" (click)="finish()">Завершить</button>
-        <button type="button" class="btn" (click)="confirmingFinish.set(false)">Отмена</button>
-      </div>
-    </div>
-  } @else {
-    <button type="button" class="link-btn" (click)="confirmingFinish.set(true)">
-      Завершить стрельбу
-    </button>
-  }
 </form>
+
+@if (toast(); as t) {
+  <div class="toast" role="status">
+    <span>{{ t.text }}</span>
+    <button type="button" (click)="undoSave()">Отменить</button>
+  </div>
+}
+
+@if (finishing(); as preview) {
+  <app-range-finish
+    [session]="preview"
+    [rifleName]="rifle().name"
+    [filled]="filled()"
+    [draftNumber]="zeroing() ? zeroingNumber() : seriesNumber()"
+    [zeroing]="!!zeroing()"
+    (back)="finishing.set(null)"
+    (done)="finish($event)"
+  />
+}
 
 @if (measuring(); as m) {
   <app-photo-measure

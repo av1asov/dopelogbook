@@ -197,34 +197,6 @@
   pointer-events: none;
 }
 
-.toast {
-  position: fixed;
-  right: 16px;
-  bottom: calc(68px + env(safe-area-inset-bottom, 0px));
-  left: 16px;
-  z-index: 23;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 48px;
-  padding: 0 4px 0 14px;
-  border-radius: 8px;
-  background: #1d221f;
-  color: #f5f6f2;
-  font-size: 15px;
-}
-
-.toast button {
-  min-height: 44px;
-  padding: 0 12px;
-  border: 0;
-  background: transparent;
-  color: var(--mark);
-  font-size: 15px;
-  font-weight: 700;
-}
-
 .notes {
   margin: 0;
   color: var(--pen);
@@ -259,4 +231,60 @@
 
 .zeroing .muted {
   font-size: 13px;
+}
+
+.go {
+  display: flex;
+  gap: 8px;
+}
+
+.go .btn-mark {
+  flex: 1;
+}
+
+.add-photo {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.add-photo.busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.add-photo svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.question {
+  margin: 0;
+  font-size: 15px;
+}
+
+.answers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notice a {
+  display: block;
+  margin-top: 4px;
+  color: var(--pen);
+  font-weight: 600;
 }

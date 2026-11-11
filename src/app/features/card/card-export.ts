@@ -35,6 +35,18 @@ const FONTS = [
 ];
 const SAMPLE = 'Яя09≈';
 
+/**
+ * The printed card is black on white whatever the theme: it is glued to the stock. Its colours
+ * are fixed here rather than read from the CSS of the screen.
+ */
+export const PRINT_PALETTE = {
+  paper: '#ffffff',
+  ink: '#000000',
+  estimate: '#555555',
+  shade: '#ebebeb',
+  foot: '#333333',
+} as const;
+
 /** The scope is named only when the rifle has more than one to tell apart. */
 const scopeName = ({ rifle, scope }: CardData): string | undefined =>
   rifle.mounts.length > 1 ? scope?.name : undefined;
@@ -111,9 +123,9 @@ export async function renderCardPng(data: CardData, options: CardExportOptions):
   canvas.width = W;
   canvas.height = H;
   const g = canvas.getContext('2d') as CanvasRenderingContext2D;
-  g.fillStyle = '#ffffff';
+  g.fillStyle = PRINT_PALETTE.paper;
   g.fillRect(0, 0, W, H);
-  g.strokeStyle = '#000';
+  g.strokeStyle = PRINT_PALETTE.ink;
   g.lineWidth = 6;
   g.strokeRect(3, 3, W - 6, H - 6);
 
@@ -131,7 +143,7 @@ export async function renderCardPng(data: CardData, options: CardExportOptions):
     return text;
   };
 
-  g.fillStyle = '#000';
+  g.fillStyle = PRINT_PALETTE.ink;
   g.textBaseline = 'top';
   g.font = `800 ${Math.round(headH * 0.3)}px Tektur, "IBM Plex Sans Condensed", sans-serif`;
   g.fillText(fit(rifle.name), pad, pad);
@@ -180,17 +192,17 @@ export async function renderCardPng(data: CardData, options: CardExportOptions):
 
   rows.forEach((row, i) => {
     if (i % 2) {
-      g.fillStyle = '#ebebeb';
+      g.fillStyle = PRINT_PALETTE.shade;
       g.fillRect(x0, y, width, rowH);
     }
-    g.fillStyle = '#000';
+    g.fillStyle = PRINT_PALETTE.ink;
     const textY = y + (rowH - fontSize) / 2;
     g.textAlign = 'left';
     g.font = `700 ${fontSize}px "JetBrains Mono", monospace`;
     g.fillText(String(row.d), x0 + 6, textY);
     g.textAlign = 'right';
     g.font = `${row.e.exact ? '700' : 'italic 400'} ${fontSize}px "JetBrains Mono", monospace`;
-    g.fillStyle = row.e.exact ? '#000' : '#555';
+    g.fillStyle = row.e.exact ? PRINT_PALETTE.ink : PRINT_PALETTE.estimate;
     g.fillText(
       `${row.e.exact ? '' : '≈'}${fmt(row.e.v, digits)}`,
       x0 + width * columns[1][1],
@@ -199,14 +211,14 @@ export async function renderCardPng(data: CardData, options: CardExportOptions):
     g.fillText(String(row.clicks ?? '—'), x0 + width * columns[2][1], textY);
     if (wind) {
       g.font = `${row.w?.exact ? '400' : 'italic 400'} ${fontSize}px "JetBrains Mono", monospace`;
-      g.fillStyle = row.w?.exact ? '#000' : '#555';
+      g.fillStyle = row.w?.exact ? PRINT_PALETTE.ink : PRINT_PALETTE.estimate;
       g.fillText(row.w ? fmt(row.w.v, 2) : '—', x0 + width * columns[3][1], textY);
     }
     y += rowH;
   });
 
   g.textAlign = 'left';
-  g.fillStyle = '#333';
+  g.fillStyle = PRINT_PALETTE.foot;
   g.font = `400 ${Math.round(footH * 0.38)}px "IBM Plex Sans Condensed", sans-serif`;
   const temps = points.temps;
   const min = temps.length ? Math.min(...temps) : null;

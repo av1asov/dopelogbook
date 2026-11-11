@@ -36,6 +36,7 @@ import {
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
+import { daysBetween, photoTakenOn } from '../../core/exif';
 import { shrinkPhoto } from '../../core/image';
 import { BottomSheet } from '../../shared/bottom-sheet';
 import { Hold } from '../../shared/hold';
@@ -46,6 +47,7 @@ import {
   numberRanges,
   offsetShort,
   photoSeries,
+  SeriesResult,
   showsSeries,
   withMeasurement,
   withoutPhoto,
@@ -70,6 +72,24 @@ interface PickedPhoto {
   number: number | null;
 }
 
+/** A question on a sheet with two answers; closing the sheet is the second one. */
+interface Question {
+  heading: string;
+  text: string;
+  yes: string;
+  no: string;
+  resolve: (yes: boolean) => void;
+}
+
+interface Measuring {
+  photo: PhotoRef;
+  context: MeasureContext;
+  /** A retake: marked up from scratch, and only replaces the photo on apply. */
+  shot?: Blob;
+  /** A new photo from «+ Фото»: it joins the record only on apply or «Сохранить». */
+  added?: boolean;
+}
+
 interface Toast {
   text: string;
   /** How to bring a deleted photo back. */
@@ -84,6 +104,12 @@ function offsetMm(series: Series): string {
   if (series.offUp == null && series.offRight == null) return '';
   const text = offsetShort({ offUp: series.offUp ?? 0, offRight: series.offRight ?? 0 });
   return text === 'в точку' ? text : `${text} мм`;
+}
+
+/** «32 мм · ↑4 →3 мм»: the numbers a series holds. */
+function numbersText(series: Series): string {
+  const group = series.group != null ? `${fmt(series.group, 0)} мм` : '';
+  return [group, offsetMm(series)].filter(Boolean).join(' · ');
 }
 
 @Component({
@@ -113,13 +139,17 @@ export class SessionPage {
   protected readonly viewing = signal<PickedPhoto | null>(null);
   protected readonly menu = signal<PickedPhoto | null>(null);
   protected readonly deleting = signal<PickedPhoto | null>(null);
-  protected readonly measuring = signal<{
-    photo: PhotoRef;
-    context: MeasureContext;
-    /** A retake: marked up from scratch, and only replaces the photo on apply. */
-    shot?: Blob;
-  } | null>(null);
+  protected readonly measuring = signal<Measuring | null>(null);
   protected readonly confirmingDelete = signal(false);
+  protected readonly question = signal<Question | null>(null);
+  /** «+ Фото» is reading a shot. */
+  protected readonly adding = signal(false);
+  /** «На рубеж» while another record is still open there. */
+  protected readonly blocked = signal(false);
+  /** Shots picked with «+ Фото», marked up one after another. */
+  private readonly queue: File[] = [];
+  /** A shot from the queue is being read, asked about or marked up: the rest wait. */
+  private inFlight = false;
   protected readonly toast = signal<Toast | null>(null);
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -130,6 +160,12 @@ export class SessionPage {
   protected readonly session = computed(() =>
     this.store.diary().sessions.find((s) => s.id === this.id()),
   );
+
+  /** The record open on the range, when it is another one. */
+  protected readonly openElsewhere = computed(() => {
+    const other = this.store.diary().sessions.find((s) => s.open && s.id !== this.id());
+    return other ? [shortDate(other.date), other.place].filter(Boolean).join(' · ') : null;
+  });
 
   protected readonly tiles = computed(() => {
     const s = this.session();
@@ -340,7 +376,92 @@ export class SessionPage {
     const s = this.session();
     const current = this.measuring();
     this.measuring.set(null);
-    if (s && current) await this.dropMarks(s, current.photo);
+    if (!s || !current) return;
+    if (current.added) {
+      await this.store.save('session', { ...s, photos: [...(s.photos ?? []), current.photo] });
+      await this.nextPhoto();
+      return;
+    }
+    await this.dropMarks(s, current.photo);
+  }
+
+  protected async closeMeasure(): Promise<void> {
+    const added = this.measuring()?.added;
+    this.measuring.set(null);
+    if (added) await this.nextPhoto();
+  }
+
+  /** «+ Фото»: from the camera or the library, several at once. */
+  protected async addPhotos(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    this.queue.push(...Array.from(input.files ?? []));
+    input.value = '';
+    if (!this.inFlight) await this.nextPhoto();
+  }
+
+  /** The next shot from the queue goes to marking up, after a check of the day it was taken. */
+  private async nextPhoto(): Promise<void> {
+    const s = this.session();
+    const file = this.queue.shift();
+    this.inFlight = !!(s && file);
+    if (!s || !file) return;
+    this.adding.set(true);
+    let shot: Blob;
+    try {
+      const taken = await photoTakenOn(file);
+      if (taken && daysBetween(taken, s.date) > 1) {
+        this.adding.set(false);
+        const sure = await this.ask({
+          heading: 'Точно сюда?',
+          text: `Фото снято ${shortDate(taken)}, а запись — ${shortDate(s.date)}.`,
+          yes: 'Да, в эту запись',
+          no: 'Пропустить фото',
+        });
+        if (!sure) return await this.nextPhoto();
+        this.adding.set(true);
+      }
+      shot = await shrinkPhoto(file);
+    } catch {
+      this.showToast({ text: 'Не удалось прочитать снимок' });
+      return await this.nextPhoto();
+    } finally {
+      this.adding.set(false);
+    }
+    const id = crypto.randomUUID();
+    if (!this.canMeasure()) {
+      // A record of zeroing alone has no series to mark up for: the photo goes to the record.
+      try {
+        await this.store.replacePhoto(id, shot);
+        await this.store.save('session', { ...s, photos: [...(s.photos ?? []), { id }] });
+      } catch {
+        this.showToast({ text: 'Не удалось сохранить — освободите место' });
+      }
+      return await this.nextPhoto();
+    }
+    const row = this.onlyBare(s);
+    const photo: PhotoRef = row ? { id, si: row.si } : { id };
+    this.measuring.set({
+      photo,
+      context: this.contextOf(s, photo, row?.si ?? null, row?.number ?? null),
+      shot,
+      added: true,
+    });
+  }
+
+  /** The one series still without a photo, if there is exactly one: the photo goes to it. */
+  private onlyBare(s: Session): { si: number; number: number } | null {
+    const bare = this.rows().filter((row) => !(s.photos ?? []).some((p) => showsSeries(p, row.si)));
+    return bare.length === 1 ? bare[0] : null;
+  }
+
+  private ask(question: Omit<Question, 'resolve'>): Promise<boolean> {
+    return new Promise((resolve) => this.question.set({ ...question, resolve }));
+  }
+
+  protected answer(yes: boolean): void {
+    const question = this.question();
+    this.question.set(null);
+    question?.resolve(yes);
   }
 
   protected askDelete(picked: PickedPhoto): void {
@@ -411,9 +532,7 @@ export class SessionPage {
         .map((row) => row.number);
       return `в сериях ${numberRanges(numbers)} — сняты с этого фото`;
     }
-    const series = session.series[measured[0]];
-    const parts = [series.group != null ? `${fmt(series.group, 0)} мм` : '', offsetMm(series)];
-    return `${parts.filter(Boolean).join(' · ')} — сняты с этого фото`;
+    return `${numbersText(session.series[measured[0]])} — сняты с этого фото`;
   }
 
   private showToast(toast: Toast): void {
@@ -434,19 +553,70 @@ export class SessionPage {
     if (!s || !current) return;
     const { id, si } = current.photo;
     const photo = result.sheet ? { id, marks: result.marks } : { id, si, marks: result.marks };
-    await this.store.save(
-      'session',
-      withMeasurement(s, photo, result.results, si === 0 ? result.cold : null),
+    // Asked before a photo is replaced: the numbers it gave do not count as typed by hand.
+    const results = await this.keepTyped(s, result.results);
+    const replaced = current.added ? await this.replaced(s, photoSeries(photo)) : [];
+    const kept = { ...s, photos: (s.photos ?? []).filter((p) => !replaced.includes(p.id)) };
+    try {
+      await this.store.save(
+        'session',
+        withMeasurement(kept, photo, results, si === 0 ? result.cold : null),
+      );
+      // Only once the record no longer points at them.
+      for (const old of replaced) await this.store.removePhoto(old);
+    } catch {
+      this.showToast({ text: 'Не удалось сохранить — освободите место' });
+    }
+    if (current.added) await this.nextPhoto();
+  }
+
+  /**
+   * «Заменить фото серии N? / Добавить второе», when a series already has a photo of its own.
+   * Gives the photos to replace; a sheet that also shows other series stays.
+   */
+  private async replaced(s: Session, series: number[]): Promise<string[]> {
+    const own = (s.photos ?? []).filter((p) => p.si != null && series.includes(p.si));
+    if (!own.length) return [];
+    const numbers = this.rows()
+      .filter((row) => own.some((p) => p.si === row.si))
+      .map((row) => row.number);
+    const replace = await this.ask({
+      heading: `Заменить фото ${numbers.length > 1 ? 'серий' : 'серии'} ${numberRanges(numbers)}?`,
+      text: 'Старое фото удалится вместе с разметкой.',
+      yes: 'Заменить',
+      no: 'Добавить второе',
+    });
+    return replace ? own.map((p) => p.id) : [];
+  }
+
+  /** Numbers typed by hand are replaced only when asked. */
+  private async keepTyped(s: Session, results: readonly SeriesResult[]): Promise<SeriesResult[]> {
+    const fromPhotos = new Set((s.photos ?? []).flatMap(measuredSeries));
+    const typed = results.filter(
+      (r) => !fromPhotos.has(r.si) && s.series[r.si] && hasNumbers(s.series[r.si]),
     );
+    if (!typed.length) return [...results];
+    const rows = this.rows().filter((row) => typed.some((r) => r.si === row.si));
+    const one = rows.length === 1 ? s.series[rows[0].si] : null;
+    const replace = await this.ask({
+      heading: `Заменить числа ${rows.length > 1 ? 'серий' : 'серии'} ${numberRanges(rows.map((r) => r.number))}?`,
+      text: one
+        ? `В серии уже введено вручную: ${numbersText(one)}.`
+        : 'В этих сериях группа и СТП уже введены вручную.',
+      yes: 'Заменить',
+      no: 'Оставить мои',
+    });
+    return replace ? [...results] : results.filter((r) => !typed.includes(r));
   }
 
+  /** «На рубеж»: a closed record opens again, unless another one is still open there. */
   protected async resume(): Promise<void> {
-    await this.store.reopenSession(this.id());
+    if (this.openElsewhere()) {
+      this.blocked.set(true);
+      return;
+    }
+    if (!this.session()?.open) await this.store.reopenSession(this.id());
     await this.router.navigate(['/range']);
-  }
-
-  protected async finish(): Promise<void> {
-    await this.store.closeSession(this.id());
   }
 
   protected async remove(): Promise<void> {

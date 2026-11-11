@@ -1,6 +1,8 @@
 import { Diary, Rifle, Session } from './model';
 import {
   altitudeAt,
+  barrelRounds,
+  cardUpdates,
   firstSeriesDefaults,
   nextSeriesDefaults,
   recentPlaces,
@@ -121,5 +123,62 @@ describe('places', () => {
   it('finds the last known altitude of a place', () => {
     expect(altitudeAt(d, 'Калибр')).toBe(160);
     expect(altitudeAt(d, 'Полигон')).toBeNull();
+  });
+});
+
+describe('cardUpdates', () => {
+  const series = (x: Partial<Session['series'][number]>) => ({
+    kind: 'normal' as const,
+    scopeId: SCOPE,
+    ammoId: HAND,
+    device: 'ДТК',
+    pos: 'prone' as const,
+    rest: 'bipod' as const,
+    hits: 5,
+    shots: 5,
+    ...x,
+  });
+
+  it('names the distances the new session now gives to each card', () => {
+    const today = session('today', '2026-11-08', {
+      series: [
+        series({ dist: 100, elev: 0 }),
+        series({ dist: 200, elev: 0.9 }),
+        series({ dist: 200, elev: 1.0 }),
+        series({ ammoId: FACTORY, dist: 300, elev: 2.4 }),
+        series({ dist: 400, elev: 3.0, skip: true }),
+        { kind: 'zeroing' as const, scopeId: SCOPE, ammoId: HAND, shots: 3 },
+      ],
+    });
+    expect(cardUpdates(exampleDiary, today)).toEqual([
+      { ammoId: HAND, scopeId: SCOPE, dists: [100, 200] },
+      { ammoId: FACTORY, scopeId: SCOPE, dists: [300] },
+    ]);
+  });
+
+  it('gives nothing for series that do not reach the card', () => {
+    const today = session('today', '2026-11-08', {
+      series: [series({ dist: 100, elev: null }), series({ dist: 200, elev: 1, hits: 0 })],
+    });
+    expect(cardUpdates(exampleDiary, today)).toEqual([]);
+  });
+
+  it('skips a point a later session already gives', () => {
+    const old = session('old', '2026-01-05', { series: [series({ dist: 400, elev: 3 })] });
+    expect(cardUpdates(exampleDiary, old)).toEqual([]);
+  });
+});
+
+describe('barrelRounds', () => {
+  it('counts every session of the rifle, the given one as it is', () => {
+    const before = barrelRounds(exampleDiary, session('none', '2026-11-08'));
+    const today = session('today', '2026-11-08', {
+      series: [{ kind: 'zeroing', scopeId: SCOPE, ammoId: HAND, shots: 3 }],
+      extraRounds: 2,
+    });
+    expect(barrelRounds(exampleDiary, today)).toBe(before + 5);
+    expect(barrelRounds(exampleDiary, { ...today, id: 's3' })).toBe(
+      before + 5 - (5 + 3 + 3 + 3 + 1),
+    );
   });
 });
