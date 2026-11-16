@@ -122,3 +122,54 @@ export function profile(
   const samples = integrate(levelEnv(input), angle, distances(step, maxDist));
   return [{ d: 0, h: -input.sightHeight }, ...samples.map((s) => ({ d: s.d, h: s.h * 1000 }))];
 }
+
+/** Height of a profile at `d`, between its points; null outside it. */
+function heightOn(points: readonly { d: number; h: number }[], d: number): number | null {
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (d >= a.d && d <= b.d) return a.h + ((b.h - a.h) * (d - a.d)) / (b.d - a.d);
+  }
+  return null;
+}
+
+/**
+ * Where the bullet really leaves the zone by the journal, m; null unless journal points lie on
+ * both sides of that place. The trajectory is convex, so a straight line between the journal
+ * heights would run under it and shorten the range: the miss r(d) = h_journal − h_calc is
+ * interpolated instead, and the fact is h_calc + r crossing −radius.
+ * `calc` and `journal` are heights over the line of sight, mm, sorted by distance.
+ */
+export function factMpbr(
+  calc: readonly { d: number; h: number }[],
+  journal: readonly { d: number; h: number }[],
+  radius: number,
+): number | null {
+  const misses = journal.flatMap((p) => {
+    const h = heightOn(calc, p.d);
+    return h == null ? [] : [{ d: p.d, r: p.h - h }];
+  });
+  if (misses.length < 2) return null;
+  const from = misses[0].d;
+  const to = misses[misses.length - 1].d;
+  const ds = [
+    ...new Set([
+      ...misses.map((m) => m.d),
+      ...calc.map((p) => p.d).filter((d) => d > from && d < to),
+    ]),
+  ].sort((a, b) => a - b);
+  let prev: { d: number; h: number } | null = null;
+  for (const d of ds) {
+    const h =
+      (heightOn(calc, d) as number) +
+      (heightOn(
+        misses.map((m) => ({ d: m.d, h: m.r })),
+        d,
+      ) as number);
+    if (prev && prev.h >= -radius && h < -radius) {
+      return prev.d + ((-radius - prev.h) / (h - prev.h)) * (d - prev.d);
+    }
+    prev = { d, h };
+  }
+  return null;
+}
