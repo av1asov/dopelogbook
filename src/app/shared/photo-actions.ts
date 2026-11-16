@@ -1,9 +1,18 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-/** «Разметка · Переснять · Удалить»: the same three on the viewer and in the hold menu. */
+/** «Поделиться · Разметка · Переснять · Удалить»: the same on the viewer and in the hold menu. */
 @Component({
   selector: 'app-photo-actions',
   template: `
+    @if (canShare()) {
+      <button type="button" class="action" (click)="share.emit()">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v12M7 8l5-5 5 5" />
+          <path d="M5 12v8h14v-8" />
+        </svg>
+        Поделиться
+      </button>
+    }
     <button type="button" class="action" [disabled]="!canMeasure()" (click)="measure.emit()">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="8" />
@@ -29,7 +38,8 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
   styles: `
     :host {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-auto-columns: minmax(0, 1fr);
+      grid-auto-flow: column;
       gap: 8px;
     }
 
@@ -68,7 +78,10 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 })
 export class PhotoActions {
   readonly canMeasure = input(true);
+  /** The photo belongs to a series: it can go out as a picture of it. */
+  readonly canShare = input(false);
 
+  readonly share = output<void>();
   readonly measure = output<void>();
   readonly retake = output<File>();
   readonly remove = output<void>();

@@ -59,6 +59,7 @@ import {
   MeasureContext,
   PhotoMeasure,
 } from '../photo-measure/photo-measure';
+import { ShareItem, ShareSheet } from '../share/share-sheet';
 import { PhotoDeleteSheet } from './photo-delete-sheet';
 
 const TOAST_MS = 2000;
@@ -123,6 +124,7 @@ function numbersText(series: Series): string {
     PhotoMeasure,
     PhotoViewer,
     RouterLink,
+    ShareSheet,
   ],
   templateUrl: './session-page.html',
   styleUrl: './session-page.css',
@@ -139,6 +141,12 @@ export class SessionPage {
   protected readonly viewing = signal<PickedPhoto | null>(null);
   protected readonly menu = signal<PickedPhoto | null>(null);
   protected readonly deleting = signal<PickedPhoto | null>(null);
+  /** Screen 15ж: one series, or the whole session. */
+  protected readonly sharing = signal<{
+    session: Session;
+    items: ShareItem[];
+    whole: boolean;
+  } | null>(null);
   protected readonly measuring = signal<Measuring | null>(null);
   protected readonly confirmingDelete = signal(false);
   protected readonly question = signal<Question | null>(null);
@@ -491,6 +499,42 @@ export class SessionPage {
     const s = this.session();
     if (!s) return;
     this.measuring.set({ photo, context: this.contextOf(s, photo, si, number), shot });
+  }
+
+  /** A photo can be shared as a picture of a series it belongs to. */
+  protected sharable(picked: PickedPhoto): boolean {
+    const photo = this.photoOf(picked);
+    return !!photo && this.rowsOf(photo).length > 0;
+  }
+
+  /** From the viewer or the hold menu: the series it was opened from, or its first one. */
+  protected shareFrom(picked: PickedPhoto): void {
+    const photo = this.photoOf(picked);
+    const rows = photo ? this.rowsOf(photo) : [];
+    const row = rows.find((r) => r.si === picked.si) ?? rows[0];
+    this.menu.set(null);
+    if (row) this.shareSeries(row.si, row.number);
+  }
+
+  protected shareSeries(si: number, number: number): void {
+    const s = this.session();
+    if (!s) return;
+    this.sharing.set({ session: s, items: [this.shareItem(s, si, number)], whole: false });
+  }
+
+  protected shareSession(): void {
+    const s = this.session();
+    if (!s) return;
+    const items = this.rows().map((row) => this.shareItem(s, row.si, row.number));
+    this.sharing.set({ session: s, items, whole: true });
+  }
+
+  /** The series with its photo: its own one before a sheet it shares with others. */
+  private shareItem(s: Session, si: number, number: number): ShareItem {
+    const photos = (s.photos ?? []).filter((p) => showsSeries(p, si));
+    const photo = photos.find((p) => p.si === si) ?? photos[0] ?? null;
+    const holeMm = photo ? this.contextOf(s, photo, si, number).holeMm : undefined;
+    return { si, number, photo, ...(holeMm ? { holeMm } : {}) };
   }
 
   /** What the markup screen works with; the viewer takes the hole size from it too. */

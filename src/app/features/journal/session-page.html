@@ -2,7 +2,12 @@
   <div class="screen">
     <div class="top-row">
       <a routerLink="/journal" class="back">‹ Журнал</a>
-      <a class="btn-small edit" [routerLink]="['/journal', s.id, 'edit']">Изменить</a>
+      <span class="top-actions">
+        @if (rows().length) {
+          <button type="button" class="btn-small" (click)="shareSession()">Поделиться</button>
+        }
+        <a class="btn-small edit" [routerLink]="['/journal', s.id, 'edit']">Изменить</a>
+      </span>
     </div>
 
     <div class="title">
@@ -131,6 +136,13 @@
             <span class="hint">фото мишени</span>
           </div>
         }
+        <button
+          type="button"
+          class="link-btn share-series"
+          (click)="shareSeries(row.si, row.number)"
+        >
+          Поделиться серией ›
+        </button>
       </article>
     } @empty {
       <span class="hint">Серий пока нет.</span>
@@ -224,6 +236,8 @@
     [group]="v.group"
     [offsetText]="v.offset"
     [canMeasure]="canMeasure()"
+    [canShare]="sharable(v.picked)"
+    (share)="shareFrom(v.picked)"
     (closed)="viewing.set(null)"
     (measure)="markUp(v.picked)"
     (retake)="retake(v.picked, $event)"
@@ -235,11 +249,22 @@
   <app-bottom-sheet [heading]="menuHeading()" (closed)="menu.set(null)">
     <app-photo-actions
       [canMeasure]="canMeasure()"
+      [canShare]="sharable(picked)"
+      (share)="shareFrom(picked)"
       (measure)="markUp(picked)"
       (retake)="retake(picked, $event)"
       (remove)="askDelete(picked)"
     />
   </app-bottom-sheet>
+}
+
+@if (sharing(); as share) {
+  <app-share-sheet
+    [session]="share.session"
+    [items]="share.items"
+    [whole]="share.whole"
+    (closed)="sharing.set(null)"
+  />
 }
 
 @if (deletion(); as d) {

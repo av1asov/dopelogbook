@@ -144,3 +144,13 @@ test('Винтовка · ствол', async ({ page }) => {
   await page.getByLabel('Ствол, мм').fill('560');
   await expectTidyFields(page, 'Винтовка · ствол');
 });
+
+test('Поделиться серией', async ({ page }) => {
+  await openFirst(page, '/journal', 'a.entry');
+  await page.getByRole('button', { name: 'Поделиться серией ›' }).first().click();
+  const sheet = page.getByRole('dialog', { name: 'Поделиться серией' });
+  await expect(sheet.locator('.previews img')).toBeVisible();
+  await expect(sheet.getByRole('textbox', { name: 'Текст к сообщению' })).toHaveValue(/^Серия 1/);
+  await expect(sheet.getByRole('switch', { name: /Место/ })).not.toBeChecked();
+  await expectTidyFields(page, 'Поделиться серией', '.share');
+});
