@@ -13,8 +13,8 @@ import {
 import { PhotoRef, Session } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
-import { marksOverlay } from '../../core/target/measure';
-import { renderShareImage } from './share-image';
+import { marksOverlay, TargetOverlay } from '../../core/target/measure';
+import { release, renderPhotoLayer, renderShareImage } from './share-image';
 import {
   DEFAULT_SHARE_OPTIONS,
   seriesSummary,
@@ -30,6 +30,17 @@ export interface ShareItem {
   number: number;
   photo: PhotoRef | null;
   holeMm?: number;
+}
+
+/** This series' target on its photo; a photo of one series takes its only target. */
+function targetOf(item: ShareItem): TargetOverlay | null {
+  const marks = item.photo?.marks;
+  if (!marks) return null;
+  const overlay = marksOverlay(marks);
+  return (
+    overlay.find((t) => t.si === item.si) ??
+    (overlay.length === 1 && item.photo?.si === item.si ? overlay[0] : null)
+  );
 }
 
 const OPTIONS_KEY = 'shareOptions';
@@ -335,20 +346,27 @@ export class ShareSheet {
   protected readonly urls = signal<string[]>([]);
   protected readonly message = signal<string | null>(null);
   protected readonly rendering = signal(true);
+  /** The saved switches are read before the first picture, so it is drawn once. */
+  private readonly loaded = signal(false);
   private renders = 0;
+  /** Photo layers by photo, series and marks: a switch of the text redraws the plate alone. */
+  private readonly layers = new Map<string, Promise<HTMLCanvasElement | null>>();
 
   protected readonly heading = computed(() =>
     this.whole() ? 'Поделиться стрельбой' : 'Поделиться серией',
   );
 
-  /** The pictures: one per series with a photo, at most four; a series without one gets a plate. */
+  /**
+   * The pictures. A single series always gets one, with only the plate when it has no photo;
+   * a whole session gets one per series with a photo, at most four, and the text covers the rest.
+   */
   private readonly pictured = computed(() => {
     const items = this.items();
     if (!this.whole()) return items.slice(0, 1);
     return items.filter((item) => item.photo).slice(0, MAX_SHARED_PICTURES);
   });
 
-  protected readonly hasMarks = computed(() => this.pictured().some((item) => item.photo?.marks));
+  protected readonly hasMarks = computed(() => this.pictured().some((item) => targetOf(item)));
 
   private readonly generated = computed(() => {
     const session = this.session();
@@ -366,10 +384,20 @@ export class ShareSheet {
   protected readonly text = computed(() => this.typed() ?? this.generated());
 
   constructor() {
-    void this.settings.readSetting<ShareOptions>(OPTIONS_KEY).then((saved) => {
-      if (saved) this.options.set({ ...DEFAULT_SHARE_OPTIONS, ...saved });
-    });
+    this.settings
+      .readSetting<ShareOptions>(OPTIONS_KEY)
+      .then((saved) => {
+        // A switch flipped while the setting was read stays as flipped.
+        if (saved) {
+          this.options.update((current) =>
+            current === DEFAULT_SHARE_OPTIONS ? { ...DEFAULT_SHARE_OPTIONS, ...saved } : current,
+          );
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => this.loaded.set(true));
     effect(() => {
+      if (!this.loaded()) return;
       const session = this.session();
       const items = this.pictured();
       const options = this.options();
@@ -377,7 +405,10 @@ export class ShareSheet {
       const unit = this.settings.groupUnit();
       untracked(() => void this.render(session, items, options, diary, unit));
     });
-    inject(DestroyRef).onDestroy(() => this.urls().forEach((url) => URL.revokeObjectURL(url)));
+    inject(DestroyRef).onDestroy(() => {
+      this.urls().forEach((url) => URL.revokeObjectURL(url));
+      this.layers.forEach((layer) => void layer.then((canvas) => canvas && release(canvas)));
+    });
   }
 
   private async render(
@@ -390,26 +421,42 @@ export class ShareSheet {
     const run = ++this.renders;
     this.rendering.set(true);
     const blobs = await Promise.all(
-      items.map(async (item) => {
-        const photo = item.photo ? await this.store.getPhoto(item.photo.id) : null;
-        const marks = item.photo?.marks;
-        const overlay = marks ? marksOverlay(marks) : [];
-        const target =
-          overlay.find((t) => t.si === item.si) ??
-          (overlay.length === 1 && item.photo?.si === item.si ? overlay[0] : null);
-        const summary = seriesSummary(diary, session, item.si, item.number, options, unit);
-        return renderShareImage(
-          { photo: photo ?? null, marks, target, holeMm: item.holeMm },
-          summary,
-          options.marks,
-        );
-      }),
-    );
+      items.map(async (item) =>
+        renderShareImage(
+          await this.layerOf(item, options.marks),
+          seriesSummary(diary, session, item.si, item.number, options, unit),
+        ),
+      ),
+    ).catch(() => null);
     if (run !== this.renders) return;
     this.urls().forEach((url) => URL.revokeObjectURL(url));
-    this.blobs.set(blobs);
-    this.urls.set(blobs.map((blob) => URL.createObjectURL(blob)));
+    this.blobs.set(blobs ?? []);
+    this.urls.set((blobs ?? []).map((blob) => URL.createObjectURL(blob)));
+    if (!blobs) this.message.set('Не удалось подготовить картинку — уйдёт только текст.');
     this.rendering.set(false);
+  }
+
+  private layerOf(item: ShareItem, withMarks: boolean): Promise<HTMLCanvasElement | null> {
+    const photo = item.photo;
+    if (!photo) return Promise.resolve(null);
+    const key = `${photo.id}:${item.si}:${withMarks}`;
+    let layer = this.layers.get(key);
+    if (!layer) {
+      layer = this.store
+        .getPhoto(photo.id)
+        .then((blob) =>
+          blob
+            ? renderPhotoLayer(
+                { photo: blob, marks: photo.marks, target: targetOf(item), holeMm: item.holeMm },
+                withMarks,
+              )
+            : null,
+        )
+        // A photo the browser cannot decode: the plate alone still goes out.
+        .catch(() => null);
+      this.layers.set(key, layer);
+    }
+    return layer;
   }
 
   protected set(key: keyof ShareOptions, event: Event): void {
@@ -430,7 +477,7 @@ export class ShareSheet {
     const items = this.pictured();
     const files = this.blobs().map(
       (blob, i) =>
-        new File([blob], shareFileName(session, this.whole() ? null : (items[i]?.number ?? null)), {
+        new File([blob], shareFileName(session, items[i]?.number ?? null), {
           type: 'image/jpeg',
         }),
     );
@@ -446,10 +493,12 @@ export class ShareSheet {
         return;
       }
       for (const file of files) download(file);
-      await navigator.clipboard?.writeText(text);
-      this.message.set(
-        files.length ? 'Картинка сохранена в «Файлы», текст скопирован.' : 'Текст скопирован.',
-      );
+      const copied = await (navigator.clipboard?.writeText(text).then(
+        () => true,
+        () => false,
+      ) ?? false);
+      const saved = files.length ? 'Картинка сохранена в «Файлы». ' : '';
+      this.message.set(saved + (copied ? 'Текст скопирован.' : 'Текст скопировать не удалось.'));
     } catch (error) {
       if ((error as DOMException).name !== 'AbortError') {
         this.message.set('Не удалось поделиться. Попробуйте ещё раз.');

@@ -1,7 +1,6 @@
-import { Point } from '../../core/ballistics';
+import { PhotoMarks, Point } from '../../core/ballistics';
 import { applyHomography, invertHomography } from '../../core/target/homography';
 import { TargetOverlay, toMillimetres } from '../../core/target/measure';
-import { PhotoMarks } from '../../core/ballistics';
 import { SeriesSummary } from './share-text';
 
 /** 4:5 — messengers show it whole, without cropping. */
@@ -31,7 +30,7 @@ const COLOURS = {
 } as const;
 
 export interface ShareShot {
-  photo: Blob | null;
+  photo: Blob;
   marks?: PhotoMarks;
   /** This series' target on the photo; on a sheet, one of several. */
   target?: TargetOverlay | null;
@@ -50,7 +49,7 @@ interface Frame {
 }
 
 /**
- * Around the holes and the point of aim, with room for the marks: never closer than 60 mm
+ * Around the holes and the point of aim, with room for the marks: never closer than 80 mm
  * across, so a tight group still shows the target around it.
  */
 function frameOf(marks: PhotoMarks, target: TargetOverlay): Frame | null {
@@ -86,7 +85,15 @@ async function pixelsOf(photo: Blob): Promise<ImageData> {
   const g = canvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
   g.drawImage(bitmap, 0, 0);
   bitmap.close();
-  return g.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = g.getImageData(0, 0, canvas.width, canvas.height);
+  release(canvas);
+  return pixels;
+}
+
+/** iOS counts canvas memory until a canvas is collected; an empty one gives it back at once. */
+export function release(canvas: HTMLCanvasElement): void {
+  canvas.width = 0;
+  canvas.height = 0;
 }
 
 /** The photo straightened onto the target plane: every picture pixel is looked up backwards. */
@@ -94,7 +101,7 @@ function drawStraight(g: CanvasRenderingContext2D, source: ImageData, frame: Fra
   const out = g.createImageData(SHARE_WIDTH, PHOTO_HEIGHT);
   const { width: sw, height: sh, data: src } = source;
   const dst = out.data;
-  const [pr, pg, pb] = [0xec, 0xe7, 0xd9];
+  const [pr, pg, pb] = [1, 3, 5].map((i) => parseInt(COLOURS.paper.slice(i, i + 2), 16));
   for (let v = 0; v < PHOTO_HEIGHT; v++) {
     for (let u = 0; u < SHARE_WIDTH; u++) {
       const { x, y } = frame.toImage({
@@ -275,7 +282,7 @@ function drawPlate(g: CanvasRenderingContext2D, summary: SeriesSummary, top: num
   }
   const spacing = 14 * scale;
   const total = lines.reduce((sum, l) => sum + l.gap, 0) + spacing * (lines.length - 1);
-  let y = big ? (SHARE_HEIGHT - total) / 2 : top + (SHARE_HEIGHT - top - total) / 2;
+  let y = top + (SHARE_HEIGHT - top - total) / 2;
   lines.forEach((line, i) => {
     y += line.gap;
     g.font = line.font;
@@ -293,35 +300,57 @@ function drawPlate(g: CanvasRenderingContext2D, summary: SeriesSummary, top: num
   });
 }
 
-/**
- * The picture of a series: the straightened photo cut to the target with its marks on top,
- * and the numbers under it. Drawn from data, never a screenshot.
- */
-export async function renderShareImage(
-  shot: ShareShot,
-  summary: SeriesSummary,
-  withMarks: boolean,
-): Promise<Blob> {
+async function loadFonts(): Promise<void> {
   try {
     await Promise.all(FONTS.map((font) => document.fonts.load(font, SAMPLE)));
   } catch {
     /* whatever fonts there are will do */
   }
+}
+
+/**
+ * The photo part of the picture: straightened and cut to the target, with its marks on top.
+ * It does not depend on the plate, so a switch of the text keeps it.
+ */
+export async function renderPhotoLayer(
+  shot: ShareShot,
+  withMarks: boolean,
+): Promise<HTMLCanvasElement> {
+  const canvas = document.createElement('canvas');
+  canvas.width = SHARE_WIDTH;
+  canvas.height = PHOTO_HEIGHT;
+  const g = canvas.getContext('2d') as CanvasRenderingContext2D;
+  g.fillStyle = COLOURS.paper;
+  g.fillRect(0, 0, SHARE_WIDTH, PHOTO_HEIGHT);
+  const frame = shot.marks && shot.target ? frameOf(shot.marks, shot.target) : null;
+  if (frame) {
+    drawStraight(g, await pixelsOf(shot.photo), frame);
+    if (withMarks) {
+      await loadFonts();
+      drawMarks(g, frame, shot);
+    }
+  } else {
+    await drawCovered(g, shot.photo);
+  }
+  return canvas;
+}
+
+/**
+ * The picture of a series: the photo layer, when there is one, and the numbers under it.
+ * Drawn from data, never a screenshot.
+ */
+export async function renderShareImage(
+  photo: CanvasImageSource | null,
+  summary: SeriesSummary,
+): Promise<Blob> {
+  await loadFonts();
   const canvas = document.createElement('canvas');
   canvas.width = SHARE_WIDTH;
   canvas.height = SHARE_HEIGHT;
   const g = canvas.getContext('2d') as CanvasRenderingContext2D;
 
-  if (shot.photo) {
-    g.fillStyle = COLOURS.paper;
-    g.fillRect(0, 0, SHARE_WIDTH, PHOTO_HEIGHT);
-    const frame = shot.marks && shot.target ? frameOf(shot.marks, shot.target) : null;
-    if (frame) {
-      drawStraight(g, await pixelsOf(shot.photo), frame);
-      if (withMarks) drawMarks(g, frame, shot);
-    } else {
-      await drawCovered(g, shot.photo);
-    }
+  if (photo) {
+    g.drawImage(photo, 0, 0);
     drawPlate(g, summary, PHOTO_HEIGHT);
   } else {
     drawPlate(g, summary, 0);
@@ -330,6 +359,7 @@ export async function renderShareImage(
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, 'image/jpeg', 0.9),
   );
+  release(canvas);
   if (!blob) throw new Error('canvas export failed');
   return blob;
 }
