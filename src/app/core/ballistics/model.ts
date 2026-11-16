@@ -24,9 +24,16 @@ export interface Scope extends Doc {
   notes?: string;
 }
 
+/** Where the V₀ of a combo came from: a chronograph or hand entry wins over the journal. */
+export type VelocitySource = 'manual' | 'journal' | 'estimate';
+
 export interface Combo {
   ammoId: string;
   velocity?: number | null;
+  /** Absent on older records, which were all typed in by hand. */
+  velocitySource?: VelocitySource;
+  /** When a journal fit was saved, YYYY-MM-DD. */
+  velocityDate?: string;
 }
 
 export interface Mount {
@@ -40,7 +47,14 @@ export interface Mount {
 export interface Rifle extends Doc {
   name: string;
   caliber?: string;
+  /** Free text from older records, such as «560 мм, 11 твист». */
   barrel?: string;
+  /** mm */
+  barrelLength?: number | null;
+  /** Inches per turn: 10 means 1:10″. */
+  twist?: number | null;
+  /** Right-hand when absent. */
+  twistDir?: 'R' | 'L';
   devices?: string[];
   notes?: string;
   combos: Combo[];
@@ -62,6 +76,21 @@ export interface Ammo extends Doc {
   brass?: string;
   primer?: string;
   coal?: number | null;
+  /** Speed printed on the box, m/s. */
+  boxVelocity?: number | null;
+  /** The test barrel of the box speed, mm; 600 when absent. */
+  boxBarrelMm?: number | null;
+  /** Where the box speed was measured; at the muzzle when absent. */
+  boxVelocityAt?: 'muzzle' | 'V10' | 'V25';
+  /** Ballistic coefficient, lb/in². */
+  bc?: number | null;
+  /** G1 when absent: boxes without a mark quote G1. */
+  dragModel?: 'G1' | 'G7';
+  bulletWeightGr?: number | null;
+  /** From the calibre when absent. */
+  bulletDiameterMm?: number | null;
+  /** Needed for spin drift only. */
+  bulletLengthMm?: number | null;
 }
 
 export interface Series {
