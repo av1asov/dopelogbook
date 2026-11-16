@@ -288,3 +288,14 @@
   color: var(--pen);
   font-weight: 600;
 }
+
+.top-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.share-series {
+  align-self: flex-end;
+  min-height: 36px;
+  font-size: 14px;
+}

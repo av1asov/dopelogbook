@@ -114,6 +114,8 @@ const NUMBER_OFFSET_MM = 30;
       <app-photo-actions
         class="actions"
         [canMeasure]="canMeasure()"
+        [canShare]="canShare()"
+        (share)="share.emit()"
         (measure)="measure.emit()"
         (retake)="retake.emit($event)"
         (remove)="remove.emit()"
@@ -265,8 +267,10 @@ export class PhotoViewer {
   /** «↑4 →3 мм». */
   readonly offsetText = input('');
   readonly canMeasure = input(true);
+  readonly canShare = input(false);
 
   readonly closed = output<void>();
+  readonly share = output<void>();
   readonly measure = output<void>();
   readonly retake = output<File>();
   readonly remove = output<void>();
