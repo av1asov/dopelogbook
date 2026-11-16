@@ -9,6 +9,7 @@ import {
   devName,
   journalVelocity,
   lastWeather,
+  MAX_RANGE,
   numText,
   pressureAtAltitude,
   shortDate,
@@ -73,6 +74,9 @@ export class BallisticsState {
   readonly zone = signal(100);
   /** The MPBR row picked by a tap, 'click:5'; the best row until one is tapped. */
   readonly mpbrRow = signal<string | null>(null);
+  /** «Дистанция, м» on «Расчёт» as typed; the last one comes back next time. */
+  readonly shotText = signal('300');
+  private shotTyped = false;
   /** Null while the conditions follow the latest session. */
   private readonly own = signal<{ value: Conditions; source: ConditionsSource } | null>(null);
 
@@ -80,6 +84,25 @@ export class BallisticsState {
     void this.settings.readSetting<PressureUnit>('pressureUnit').then((unit) => {
       if (unit) this.pressureUnit.set(unit);
     });
+    void this.settings.readSetting<number>('shotDistance').then((d) => {
+      // Typing beats a slow read: the field must not jump back under the finger.
+      if (d && !this.shotTyped) this.shotText.set(String(d));
+    });
+  }
+
+  /** m, whole, 1…1500; null while the field holds something else. */
+  readonly shotDist = computed(() => {
+    const text = this.shotText().trim();
+    if (!/^\d{1,4}$/.test(text)) return null;
+    const d = Number(text);
+    return d >= 1 && d <= MAX_RANGE ? d : null;
+  });
+
+  setShotText(text: string): void {
+    this.shotTyped = true;
+    this.shotText.set(text);
+    const d = this.shotDist();
+    if (d != null) void this.settings.writeSetting('shotDistance', d);
   }
 
   readonly setup = computed((): CalcSetup | null => {

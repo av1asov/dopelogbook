@@ -153,3 +153,114 @@
 .wind-sheet app-wind-clock {
   align-self: center;
 }
+
+/* Dark in both themes: the one thing to read off the screen at the line. */
+.shot {
+  --shot-bg: #1d221f;
+  --shot-ink: #e8eae4;
+  --shot-ink-2: #a9b2ab;
+  --shot-mark: #f1c40f;
+  --shot-warn: #e19a4e;
+
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 6px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--shot-bg);
+  color: var(--shot-ink);
+}
+
+.shot-dist {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.shot-label {
+  color: var(--shot-ink-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.shot-dist input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  appearance: none;
+  height: 52px;
+  padding: 0 8px;
+  border: 1.5px solid var(--shot-ink);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--shot-ink);
+  font-size: 30px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.shot-dist input:focus {
+  border-color: var(--shot-mark);
+  outline: none;
+}
+
+.shot-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  min-height: 70px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: right;
+}
+
+.shot-elev {
+  color: var(--shot-mark);
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.shot-elev small {
+  color: var(--shot-ink-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.shot-clicks {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.shot-wind {
+  color: var(--shot-ink-2);
+  font-size: 15px;
+}
+
+.shot .warn {
+  color: var(--shot-warn);
+}
+
+.shot-none {
+  margin: auto 0;
+  color: var(--shot-ink-2);
+  font-size: 14px;
+}
+
+.shot-more,
+.shot-note {
+  grid-column: 1 / -1;
+  font-size: 14px;
+}
+
+.shot-more {
+  color: var(--shot-ink-2);
+}

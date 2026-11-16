@@ -11,6 +11,7 @@ import {
   mmHgToHpa,
   numText,
   parseNum,
+  plural,
   solve,
   toUnits,
   unitDigits,
@@ -37,6 +38,12 @@ const UNIT_NAMES: Record<PressureUnit, string> = {
   alt: 'высота, м',
 };
 const NEXT_UNIT: Record<PressureUnit, PressureUnit> = { mmHg: 'hPa', hPa: 'alt', alt: 'mmHg' };
+
+/** «↑80 щелч.», «0 щелч.» */
+function clicksText(clicks: number, plus: string, minus: string): string {
+  const arrow = clicks > 0 ? plus : clicks < 0 ? minus : '';
+  return `${arrow}${Math.abs(clicks)} ${plural(Math.abs(clicks), 'щелчок', 'щелчка', 'щелчков')}`;
+}
 
 /** An arrow for the side, never a minus: «↓0,1», «←0,4». */
 function arrowed(value: number, digits: number, plus: string, minus: string): string {
@@ -69,6 +76,8 @@ export class CalcPage {
   protected readonly windOpen = signal(false);
   protected readonly moreOpen = signal(false);
   protected readonly fitOpen = signal(false);
+  /** Speed, energy, time and drift under the result at the typed distance. */
+  protected readonly shotMore = signal(false);
   protected readonly clockText = clockText;
   protected readonly unitNames = UNIT_NAMES;
 
@@ -140,6 +149,36 @@ export class CalcPage {
       };
     });
   });
+
+  /** The dial for the distance typed off the rangefinder: the main thing on this screen. */
+  protected readonly shot = computed(() => {
+    const input = this.state.input();
+    const d = this.state.shotDist();
+    if (!input || d == null) return null;
+    const [r] = solve(input, [d]);
+    if (!r) return null;
+    const units = this.units();
+    const digits = this.digits();
+    const click = clickOf(this.scope());
+    const elev = toUnits(r.elev, units);
+    const wind = toUnits(r.wind, units);
+    const drift = r.drift == null ? null : toUnits((-r.drift / 1000 / r.d) * 1000, units);
+    return {
+      elev: arrowed(elev, digits, '↑', '↓'),
+      clicks: clicksText(Math.round(elev / click), '↑', '↓'),
+      wind: arrowed(wind, digits, '→', '←'),
+      windClicks: clicksText(Math.round(wind / click), '→', '←'),
+      subsonic: r.mach < 1,
+      v: fmt(r.v, 0),
+      energy: r.energy == null ? null : fmt(r.energy, 0),
+      time: fmt(r.time, 2),
+      drift: drift == null ? null : arrowed(drift, digits, '→', '←'),
+    };
+  });
+
+  protected setShot(event: Event): void {
+    this.state.setShotText((event.target as HTMLInputElement).value);
+  }
 
   protected readonly subsonicAt = computed(() => this.trajectory()?.subsonicAt ?? null);
   protected readonly transonic = computed(() => this.rows().some((r) => r.transonic));

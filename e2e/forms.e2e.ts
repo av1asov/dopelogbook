@@ -124,6 +124,8 @@ test('Баллистика · расчёт', async ({ page }) => {
   await page.goto('/ballistics/calc');
   await expect(page.getByRole('tab', { name: 'Расчёт' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.row.data').first()).toBeVisible();
+  await page.getByLabel('Дистанция, м').fill('237');
+  await expect(page.locator('.shot-elev')).toContainText('↑');
   await expectTidyFields(page, 'Баллистика · расчёт');
   await page.getByRole('button', { name: 'ещё условия' }).click();
   await page.getByRole('checkbox', { name: /Кориолис/ }).check();

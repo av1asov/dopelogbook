@@ -97,6 +97,56 @@
       }
 
       @if (state.input()) {
+        <section class="shot" aria-label="Расчёт на дистанцию">
+          <label class="shot-dist">
+            <span class="shot-label">Дистанция, м</span>
+            <!-- «big»: a large number read at the line, not a form field of the common size. -->
+            <input
+              class="num big"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              enterkeyhint="done"
+              maxlength="4"
+              autocomplete="off"
+              [value]="state.shotText()"
+              (input)="setShot($event)"
+            />
+          </label>
+          <button
+            type="button"
+            class="shot-result"
+            [attr.aria-expanded]="shotMore()"
+            (click)="shotMore.set(!shotMore())"
+          >
+            @if (shot(); as s) {
+              <span class="shot-elev num" [class.warn]="s.subsonic">
+                {{ s.elev }}{{ s.subsonic ? ' ⚠' : '' }}
+                <small>{{ unitLabel() }}</small>
+              </span>
+              <span class="shot-clicks num" [class.warn]="s.subsonic">{{ s.clicks }}</span>
+              <span class="shot-wind num">ветер {{ s.wind }} · {{ s.windClicks }}</span>
+            } @else {
+              <span class="shot-none">Дистанция от 1 до 1500 м</span>
+            }
+          </button>
+          @if (shot(); as s) {
+            @if (shotMore()) {
+              <span class="shot-more num">
+                V {{ s.v }} м/с · t {{ s.time }} с
+                @if (s.energy; as e) {
+                  · E {{ e }} Дж
+                }
+                @if (s.drift; as drift) {
+                  · дер. {{ drift }}
+                }
+              </span>
+            }
+            @if (s.subsonic) {
+              <span class="shot-note warn">⚠ Пуля в дозвуке — расчёт менее точен.</span>
+            }
+          }
+        </section>
+
         <div class="table" [class.extra]="state.extra()">
           <div class="row titles">
             <span>м</span>
