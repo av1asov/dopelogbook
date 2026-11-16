@@ -10,11 +10,11 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { PhotoRef, Session } from '../../core/ballistics';
+import { PhotoRef, Session, TargetTemplate } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 import { SettingsStore } from '../../core/data/settings-store';
-import { marksOverlay, TargetOverlay } from '../../core/target/measure';
-import { release, renderPhotoLayer, renderShareImage } from './share-image';
+import { elementSize, marksOverlay, TargetOverlay } from '../../core/target/measure';
+import { PrintedTarget, release, renderPhotoLayer, renderShareImage } from './share-image';
 import {
   DEFAULT_SHARE_OPTIONS,
   seriesSummary,
@@ -41,6 +41,21 @@ function targetOf(item: ShareItem): TargetOverlay | null {
     overlay.find((t) => t.si === item.si) ??
     (overlay.length === 1 && item.photo?.si === item.si ? overlay[0] : null)
   );
+}
+
+/** The printed target the series was shot at, from the photo's template. */
+function printedOf(
+  item: ShareItem,
+  target: TargetOverlay | null,
+  templates: readonly TargetTemplate[],
+): PrintedTarget | null {
+  const id = item.photo?.marks?.templateId;
+  const template = id ? templates.find((t) => t.id === id) : undefined;
+  const printed =
+    template?.targets.find((t) => t.n === target?.n) ??
+    (template?.targets.length === 1 ? template.targets[0] : undefined);
+  const size = printed && elementSize(printed.reference);
+  return printed && size ? { size, aim: printed.aim } : null;
 }
 
 const OPTIONS_KEY = 'shareOptions';
@@ -442,12 +457,19 @@ export class ShareSheet {
     const key = `${photo.id}:${item.si}:${withMarks}`;
     let layer = this.layers.get(key);
     if (!layer) {
+      const target = targetOf(item);
       layer = this.store
         .getPhoto(photo.id)
         .then((blob) =>
           blob
             ? renderPhotoLayer(
-                { photo: blob, marks: photo.marks, target: targetOf(item), holeMm: item.holeMm },
+                {
+                  photo: blob,
+                  marks: photo.marks,
+                  target,
+                  holeMm: item.holeMm,
+                  printed: printedOf(item, target, this.store.targets()),
+                },
                 withMarks,
               )
             : null,
@@ -485,7 +507,13 @@ export class ShareSheet {
     this.message.set(null);
     try {
       if (files.length && navigator.canShare?.({ files })) {
+        // Telegram and others take the pictures alone from the share sheet. Started before
+        // the sheet, while the tap still counts, the copy waits to be pasted as a caption.
+        const copied = copy(text);
         await navigator.share({ files, text });
+        if (await copied) {
+          this.message.set('Текст скопирован: если его нет в сообщении, вставьте в подпись.');
+        }
         return;
       }
       if (!files.length && navigator.share) {
@@ -493,10 +521,7 @@ export class ShareSheet {
         return;
       }
       for (const file of files) download(file);
-      const copied = await (navigator.clipboard?.writeText(text).then(
-        () => true,
-        () => false,
-      ) ?? false);
+      const copied = await copy(text);
       const saved = files.length ? 'Картинка сохранена в «Файлы». ' : '';
       this.message.set(saved + (copied ? 'Текст скопирован.' : 'Текст скопировать не удалось.'));
     } catch (error) {
@@ -505,6 +530,16 @@ export class ShareSheet {
       }
     }
   }
+}
+
+/** Whether the text reached the clipboard; without access to it, false. */
+function copy(text: string): Promise<boolean> {
+  return (
+    navigator.clipboard?.writeText(text).then(
+      () => true,
+      () => false,
+    ) ?? Promise.resolve(false)
+  );
 }
 
 function download(file: File): void {

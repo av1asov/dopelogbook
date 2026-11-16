@@ -300,6 +300,12 @@ export function offsetShort(offset: Offset | null): string {
     .join(' ');
 }
 
+/** The size of the printed element across, mm; a grid has none. */
+export const elementSize = (reference: TargetReference): number | null => {
+  if (reference.kind === 'rings') return Math.max(...reference.diameters);
+  return reference.kind === 'grid' ? null : reference.size;
+};
+
 export function referenceText(reference: TargetReference): string {
   switch (reference.kind) {
     case 'square':

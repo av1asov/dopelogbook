@@ -22,7 +22,7 @@ import {
   tiltDegrees,
 } from './homography';
 import { CleanPicture, findHoles } from './holes';
-import { assignToTargets, distance, fitLayout, FoundElement } from './measure';
+import { assignToTargets, distance, elementSize, fitLayout, FoundElement } from './measure';
 import {
   assessQuality,
   ElementCheck,
@@ -1163,11 +1163,6 @@ function findRingSets(
   }
   return sets.map(({ score: _score, ...set }) => set);
 }
-
-const elementSize = (reference: TargetReference): number | null => {
-  if (reference.kind === 'rings') return Math.max(...reference.diameters);
-  return reference.kind === 'grid' ? null : reference.size;
-};
 
 function matchesReference(element: PlaneElement, target: TemplateTarget): boolean {
   const { reference } = target;
