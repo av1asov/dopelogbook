@@ -64,14 +64,62 @@ const TARGET_MARGIN = 1.2;
 /** Room beyond the farthest hole for its ring, mm. */
 const HOLE_ROOM_MM = 12;
 
+/** Pixels of the photo, to keep the frame on it. */
+export interface PhotoSize {
+  width: number;
+  height: number;
+}
+
+/** A span of the plane, mm. */
+interface Span {
+  lo: number;
+  hi: number;
+}
+
 /**
- * The whole target: centred on the printed target and cut to its size, from the template.
- * The holes and the point of aim always fit, and without a template it is 200 mm at least.
+ * The span `len` long around `centre`: inside `limit` where it fits (evenly over it where it
+ * does not), and always over all of `need`.
+ */
+function place(centre: number, len: number, need: Span, limit: Span | null): Span {
+  let lo = centre - len / 2;
+  if (limit) {
+    lo =
+      len <= limit.hi - limit.lo
+        ? Math.min(Math.max(lo, limit.lo), limit.hi - len)
+        : (limit.lo + limit.hi - len) / 2;
+  }
+  lo = Math.min(Math.max(lo, need.hi - len), need.lo);
+  return { lo, hi: lo + len };
+}
+
+/**
+ * The plane under the photo, mm: inside the four corners, so no paper shows around it.
+ * A straightened photo is a quadrangle; the box between its inner corners stays inside it.
+ */
+function photoBox(toPlane: (p: Point) => Point, size: PhotoSize): { x: Span; y: Span } | null {
+  const { width: w, height: h } = size;
+  const [tl, tr, br, bl] = [
+    { x: 0, y: 0 },
+    { x: w, y: 0 },
+    { x: w, y: h },
+    { x: 0, y: h },
+  ].map(toPlane);
+  const x = { lo: Math.max(tl.x, bl.x), hi: Math.min(tr.x, br.x) };
+  const y = { lo: Math.max(tl.y, tr.y), hi: Math.min(bl.y, br.y) };
+  return x.hi > x.lo && y.hi > y.lo ? { x, y } : null;
+}
+
+/**
+ * The whole target: centred on the printed target and cut to its size, from the template;
+ * without a template, 200 mm at least. Never past the edges of the photo when its size is
+ * known: a photo taken close shows what it has, cropped to the picture, not a small photo on
+ * paper. The holes and the point of aim always fit.
  */
 export function frameOf(
   marks: PhotoMarks,
   target: TargetOverlay,
   printed?: PrintedTarget | null,
+  photo?: PhotoSize | null,
 ): Frame | null {
   const toPlane = toMillimetres(marks);
   const points = [...target.holes, target.aim, target.centre]
@@ -90,10 +138,43 @@ export function frameOf(
           y: (Math.min(...ys) + Math.max(...ys)) / 2,
         };
   const half = ((printed?.size ?? UNKNOWN_TARGET_MM) * TARGET_MARGIN) / 2;
-  const halfX = Math.max(half, ...xs.map((x) => Math.abs(x - cx) + HOLE_ROOM_MM));
-  const halfY = Math.max(half, ...ys.map((y) => Math.abs(y - cy) + HOLE_ROOM_MM));
-  const width = Math.max(halfX * 2, (halfY * 2 * SHARE_WIDTH) / PHOTO_HEIGHT);
-  const height = (width * PHOTO_HEIGHT) / SHARE_WIDTH;
+  const box = photo ? photoBox(toPlane, photo) : null;
+  // Room for the rings, but not past the edge of the photo: a ring cut by it beats paper.
+  const needOf = (vs: number[], limit: Span | undefined): Span => ({
+    lo: Math.min(Math.max(Math.min(...vs) - HOLE_ROOM_MM, limit?.lo ?? -Infinity), Math.min(...vs)),
+    hi: Math.max(Math.min(Math.max(...vs) + HOLE_ROOM_MM, limit?.hi ?? Infinity), Math.max(...vs)),
+  });
+  const needX = needOf(xs, box?.x);
+  const needY = needOf(ys, box?.y);
+  // The target, cut by the photo, but never cutting a hole off.
+  const cut = (c: number, need: Span, limit: Span | undefined): Span => ({
+    lo: Math.min(Math.max(c - half, limit?.lo ?? -Infinity), need.lo),
+    hi: Math.max(Math.min(c + half, limit?.hi ?? Infinity), need.hi),
+  });
+  const sx = cut(cx, needX, box?.x);
+  const sy = cut(cy, needY, box?.y);
+  const aspect = SHARE_WIDTH / PHOTO_HEIGHT;
+  const len = (span: Span) => span.hi - span.lo;
+  // To the picture's shape: widen the short side while the photo has more, then crop the long
+  // one, never past the holes; paper shows only where the holes leave no other way.
+  let width: number;
+  let height: number;
+  if (len(sx) > len(sy) * aspect) {
+    height = Math.min(len(sx) / aspect, Math.max(len(sy), box ? len(box.y) : Infinity));
+    width = Math.max(height * aspect, len(needX));
+    height = width / aspect;
+  } else {
+    width = Math.min(len(sy) * aspect, Math.max(len(sx), box ? len(box.x) : Infinity));
+    height = Math.max(width / aspect, len(needY));
+    width = height * aspect;
+  }
+  /** On the target where the span is cropped, on the middle of the span where it grows. */
+  const centre = (c: number, span: Span, size: number) =>
+    size >= len(span)
+      ? (span.lo + span.hi) / 2
+      : Math.min(Math.max(c, span.lo + size / 2), span.hi - size / 2);
+  const fx = place(centre(cx, sx, width), width, needX, box?.x ?? null);
+  const fy = place(centre(cy, sy, height), height, needY, box?.y ?? null);
   let toImage: (p: Point) => Point;
   if (marks.homography) {
     const inverse = invertHomography(marks.homography);
@@ -103,7 +184,7 @@ export function frameOf(
     const pxPerMm = Math.hypot(p2.x - p1.x, p2.y - p1.y) / mm;
     toImage = ({ x, y }) => ({ x: x * pxPerMm, y: y * pxPerMm });
   }
-  return { x0: cx - width / 2, y0: cy - height / 2, k: SHARE_WIDTH / width, toPlane, toImage };
+  return { x0: fx.lo, y0: fy.lo, k: SHARE_WIDTH / width, toPlane, toImage };
 }
 
 async function pixelsOf(photo: Blob): Promise<ImageData> {
@@ -351,9 +432,13 @@ export async function renderPhotoLayer(
   const g = canvas.getContext('2d') as CanvasRenderingContext2D;
   g.fillStyle = COLOURS.paper;
   g.fillRect(0, 0, SHARE_WIDTH, PHOTO_HEIGHT);
-  const frame = shot.marks && shot.target ? frameOf(shot.marks, shot.target, shot.printed) : null;
-  if (frame) {
-    drawStraight(g, await pixelsOf(shot.photo), frame);
+  const pixels = shot.marks && shot.target ? await pixelsOf(shot.photo) : null;
+  const frame =
+    pixels && shot.marks && shot.target
+      ? frameOf(shot.marks, shot.target, shot.printed, pixels)
+      : null;
+  if (pixels && frame) {
+    drawStraight(g, pixels, frame);
     if (withMarks) {
       await loadFonts();
       drawMarks(g, frame, shot);
