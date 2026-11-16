@@ -51,6 +51,22 @@
             [ghostPoints]="ghost()"
             [journal]="row.facts"
           />
+          <span class="legend">
+            <span>— выбранный</span>
+            @if (ghost()) {
+              <span>- - сейчас</span>
+            }
+          </span>
+          @if (verdict(); as v) {
+            <p
+              class="verdict"
+              [class.ok]="v.tone === 'ok'"
+              [class.warn]="v.tone === 'miss'"
+              [class.none]="v.tone === 'none'"
+            >
+              {{ v.text }}
+            </p>
+          }
 
           <div class="row titles">
             <span>Щелч.</span>
@@ -89,17 +105,6 @@
               </span>
             </button>
           }
-          <span class="legend">
-            <span>— расчёт</span>
-            @if (ghost()) {
-              <span>┄ сейчас</span>
-            }
-            @if (row.facts.length) {
-              <span class="ok">◆ журнал (±полщелчка)</span>
-            }
-            <span>см на {{ zeroDist() }} м — где СТП при пристрелке</span>
-            <span>касание строки — её траектория</span>
-          </span>
 
           @if (journalHint() || practical()) {
             <div class="hint-box">

@@ -143,6 +143,15 @@ test('Баллистика · MPBR', async ({ page }) => {
     page.getByText(/Как пристрелять: на 100 м поднять прицел на \d+ щелч/),
   ).toBeVisible();
   await expectTidyFields(page, 'Баллистика · MPBR');
+  // No numbers by the journal ◆: one line under the chart, and a tap on a ◆ tells the rest.
+  await expect(page.locator('.verdict')).toHaveText(/^\s*◆ /);
+  await expect(page.locator('app-mpbr-chart text', { hasText: 'журнал' })).toHaveCount(0);
+  await page.locator('circle.hit').last().click({ force: true });
+  await expect(page.locator('.bubble')).toContainText(
+    /\d+ м · ваши выстрелы: [\d,]+ см (ниже|выше)/,
+  );
+  await page.locator('.bubble').click();
+  await expect(page.locator('.bubble')).toHaveCount(0);
   // A sight of 45 mm over a zone of 8 cm: the range starts a few metres out.
   await page.getByLabel('Диаметр зоны, см').fill('8');
   await page.getByLabel('Диаметр зоны, см').press('Enter');

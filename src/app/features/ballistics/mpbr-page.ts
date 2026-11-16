@@ -23,7 +23,14 @@ import { BallisticsEmpty } from './ballistics-empty';
 import { BallisticsHead } from './ballistics-head';
 import { BallisticsState, ZONES } from './ballistics-state';
 import { MpbrChart } from './mpbr-chart';
-import { ChartFact, ChartPoint, entryText, rangeText } from './mpbr-labels';
+import {
+  ChartFact,
+  ChartPoint,
+  entryText,
+  heightAt,
+  journalVerdict,
+  rangeText,
+} from './mpbr-labels';
 import { VelocityFitSheet } from './velocity-fit-sheet';
 
 interface Row extends MpbrRow {
@@ -36,16 +43,6 @@ interface Row extends MpbrRow {
 }
 
 const round5 = (d: number): number => Math.round(d / 5) * 5;
-
-/** Height of the profile at `d`, between its points. */
-function heightAt(points: readonly ChartPoint[], d: number): number | null {
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1];
-    const b = points[i];
-    if (d >= a.d && d <= b.d) return a.h + ((b.h - a.h) * (d - a.d)) / (b.d - a.d);
-  }
-  return null;
-}
 
 @Component({
   selector: 'app-mpbr-page',
@@ -89,16 +86,22 @@ export class MpbrPage {
 
   /**
    * h(d) = −elevEff(d)·d + Δθ·d: the journal says how far the bullet fell under the scope's
-   * zero; another zero lifts it by the angle between the two.
+   * zero; another zero lifts it by the angle between the two. Each ◆ carries the calculated
+   * curve of the same zero at its distance.
    */
   private factsFor(line: MpbrLine, zeroAngle: number | null): ChartFact[] {
-    if (zeroAngle == null) return [];
+    const data = this.result();
+    const journal = this.journal();
+    if (zeroAngle == null || !data || !journal.length) return [];
     const shift = (line.angle - zeroAngle) * 1000;
     const halfClick = this.click() / 2;
-    return this.journal().map((p) => ({
+    const last = Math.max(...journal.map((p) => p.d));
+    const calc = profile(data.input, line.angle, Math.ceil(last / 2) * 2);
+    return journal.map((p) => ({
       d: p.d,
       h: (-p.elev + shift) * p.d,
       spread: Math.max(halfClick, p.spread / 2) * p.d,
+      calc: heightAt(calc, p.d),
     }));
   }
 
@@ -149,6 +152,18 @@ export class MpbrPage {
     return Math.ceil((best * 1.2) / 10) * 10;
   });
 
+  /**
+   * «◆ ваши выстрелы совпали с расчётом на 100 и 200 м ✓», the widest miss, or no shots to check
+   * by: on the chosen row, up to its MPBR + 20 % (the whole chart for a row over the zone).
+   */
+  protected readonly verdict = computed(() => {
+    const row = this.selected();
+    if (!row) return null;
+    const { mpbr: range, above } = row.line;
+    const reach = range != null && !above ? range * 1.2 : this.axis();
+    return journalVerdict(row.facts, reach);
+  });
+
   private profileOf(line: MpbrLine): ChartPoint[] {
     const data = this.result();
     return data ? profile(data.input, line.angle, this.axis()) : [];
@@ -180,12 +195,10 @@ export class MpbrPage {
     const row = this.selected();
     if (!row || row.fact == null || row.line.mpbr == null || row.line.above) return null;
     if (Math.abs(row.fact - row.line.mpbr) <= 10) return null;
-    const points = this.points();
     let worst: { d: number; diff: number } | null = null;
     for (const f of row.facts) {
-      const calc = heightAt(points, f.d);
-      if (calc == null) continue;
-      const diff = f.h - calc;
+      if (f.calc == null) continue;
+      const diff = f.h - f.calc;
       if (!worst || Math.abs(diff) > Math.abs(worst.diff)) worst = { d: f.d, diff };
     }
     if (!worst) return null;

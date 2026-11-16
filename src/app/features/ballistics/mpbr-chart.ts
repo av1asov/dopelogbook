@@ -32,7 +32,6 @@ const LABEL_CLASS: Record<LabelKind, string> = {
   peak: 'mark hot-text',
   far: 'mark',
   near: 'mark',
-  fact: 'mark fact-text',
   ghost: 'mark ghost-text',
 };
 
@@ -40,7 +39,13 @@ const LABEL_CLASS: Record<LabelKind, string> = {
 @Component({
   selector: 'app-mpbr-chart',
   template: `
-    <svg [attr.viewBox]="'0 0 ' + W + ' 150'" width="100%" role="img" [attr.aria-label]="label()">
+    <svg
+      [attr.viewBox]="'0 0 ' + W + ' 150'"
+      width="100%"
+      role="img"
+      [attr.aria-label]="label()"
+      (click)="picked.set(null)"
+    >
       <defs>
         <clipPath id="mpbr-plot">
           <rect
@@ -94,21 +99,47 @@ const LABEL_CLASS: Record<LabelKind, string> = {
         />
         <rect
           class="fact"
+          [class.on]="picked() === f.d"
           [attr.x]="f.x - 4"
           [attr.y]="f.y - 4"
           width="8"
           height="8"
           [attr.transform]="'rotate(45 ' + f.x + ' ' + f.y + ')'"
         />
+        <!-- A finger needs more than the 8 px of the ◆. -->
+        <circle
+          class="hit"
+          [attr.cx]="f.x"
+          [attr.cy]="f.y"
+          r="16"
+          role="button"
+          tabindex="0"
+          [attr.aria-label]="f.text"
+          (click)="pick(f.d, $event)"
+          (keydown.enter)="pick(f.d, $event)"
+        />
       }
       @for (l of layout().labels; track l.kind + l.x) {
         <text [attr.class]="labelClass[l.kind]" [attr.x]="l.tx" [attr.y]="l.ty">{{ l.text }}</text>
       }
     </svg>
+    @if (pickedFact(); as f) {
+      <button
+        type="button"
+        class="bubble"
+        [style.transform]="bubbleShift(f)"
+        [style.left.%]="(f.x / W) * 100"
+        [style.top.%]="(f.y / 150) * 100"
+        (click)="picked.set(null)"
+      >
+        {{ f.text }}
+      </button>
+    }
   `,
   styles: `
     :host {
       display: block;
+      position: relative;
     }
 
     svg {
@@ -194,8 +225,30 @@ const LABEL_CLASS: Record<LabelKind, string> = {
       stroke-width: 1.2;
     }
 
-    .fact-text {
-      fill: var(--ok);
+    .fact.on {
+      stroke: var(--ink);
+      stroke-width: 1.6;
+    }
+
+    .hit {
+      fill: transparent;
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* Over the ◆, kept on the chart near its edges. */
+    .bubble {
+      position: absolute;
+      z-index: 1;
+      max-width: 240px;
+      width: max-content;
+      padding: 6px 9px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--card-paper);
+      font: 600 12px/1.3 var(--f-body);
+      text-align: left;
     }
 
     .ghost-text {
@@ -223,6 +276,24 @@ export class MpbrChart {
   protected readonly MID = MID;
   protected readonly ZONE_PX = ZONE_PX;
   protected readonly labelClass = LABEL_CLASS;
+  /** The ◆ tapped, by its distance. */
+  protected readonly picked = signal<number | null>(null);
+  protected readonly pickedFact = computed(
+    () => this.layout().facts.find((f) => f.d === this.picked()) ?? null,
+  );
+
+  /** Above the ◆, below it near the top; from its left or right side near an edge. */
+  protected bubbleShift(f: { x: number; y: number }): string {
+    const x = f.x < W / 3 ? '-14px' : f.x > (W * 2) / 3 ? 'calc(-100% + 14px)' : '-50%';
+    const y = f.y < 60 ? '12px' : 'calc(-100% - 12px)';
+    return `translate(${x}, ${y})`;
+  }
+
+  protected pick(d: number, event: Event): void {
+    // The tap must not reach the chart, which closes the bubble.
+    event.stopPropagation();
+    this.picked.update((now) => (now === d ? null : d));
+  }
 
   /** What is drawn now: follows `points` over 200 ms. */
   private readonly shown = signal<ChartPoint[]>([]);
