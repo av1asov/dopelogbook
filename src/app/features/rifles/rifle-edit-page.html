@@ -9,10 +9,22 @@
     <p class="error">{{ message }}</p>
   }
 
-  <div class="form-grid">
+  <div class="form-grid three">
     <label class="field wide">Название<input formControlName="name" /></label>
     <label class="field">Калибр<input formControlName="caliber" placeholder=".308 Win" /></label>
-    <label class="field">Ствол<input formControlName="barrel" placeholder="длина, твист" /></label>
+    <label class="field">
+      Ствол, мм
+      <input class="num" formControlName="barrelLength" inputmode="decimal" placeholder="560" />
+    </label>
+    <label class="field">
+      Шаг 1:…″
+      <input
+        class="num"
+        formControlName="twist"
+        placeholder="10"
+        aria-label="Шаг нарезов, дюймов на оборот; левые — с буквой L"
+      />
+    </label>
   </div>
 
   <section class="section" formArrayName="mounts">
@@ -107,13 +119,27 @@
     <div class="combo-list">
       @for (combo of form.controls.combos.controls; track combo; let i = $index) {
         <div class="combo-row" [formGroupName]="i">
-          <span class="grow">{{ ammoLabel(combo.controls.ammoId.value) }}</span>
+          <span class="grow ammo-name">
+            {{ ammoLabel(combo.controls.ammoId.value) }}
+            @if (velocityNote(combo); as note) {
+              <span class="source">{{ note }}</span>
+            }
+            @if (fits()[combo.controls.ammoId.value]; as fit) {
+              <button
+                type="button"
+                class="fit-link"
+                (click)="fitFor.set(combo.controls.ammoId.value)"
+              >
+                по журналу ≈{{ round(fit.v0) }}
+              </button>
+            }
+          </span>
           <span class="v0">V₀</span>
           <input
             class="input num velocity"
             formControlName="velocity"
             inputmode="decimal"
-            placeholder="м/с"
+            [placeholder]="estimates()[combo.controls.ammoId.value] ?? 'м/с'"
             [attr.aria-label]="'Скорость: ' + ammoLabel(combo.controls.ammoId.value)"
           />
           @if (seriesSessions(combo.controls.ammoId.value); as count) {
@@ -145,11 +171,24 @@
       }
     </div>
     <span class="hint"
-      >Скорость — из этого ствола: один патрон из разных винтовок летит по-разному.</span
+      >Скорость — из этого ствола: один патрон из разных винтовок летит по-разному. Без хронографа
+      пустое поле считается оценкой с пачки, а по стрельбам с 200 м её можно подобрать по
+      журналу.</span
     >
   </section>
 
   <label class="field">Заметки<textarea formControlName="notes"></textarea></label>
+
+  @if (fitFor(); as ammoId) {
+    @if (fits()[ammoId]; as fit) {
+      <app-velocity-fit-sheet
+        [fit]="fit"
+        [v0]="currentV0(ammoId)"
+        (save)="applyFit(ammoId, $event)"
+        (closed)="fitFor.set(null)"
+      />
+    }
+  }
 
   @if (id()) {
     @if (confirmingDelete()) {

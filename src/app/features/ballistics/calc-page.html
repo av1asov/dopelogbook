@@ -1,0 +1,291 @@
+@if (state.setup(); as setup) {
+  <div class="page">
+    <app-ballistics-head
+      [rifle]="setup.rifle.name"
+      [combo]="state.title()"
+      [specs]="state.specs()"
+      (pick)="sheetOpen.set(true)"
+    />
+
+    <div class="body">
+      <section class="conditions" aria-label="Условия">
+        <div class="cell">
+          <span class="label">Темп., °C</span>
+          <app-stepper
+            class="mini"
+            minusLabel="Холоднее"
+            plusLabel="Теплее"
+            (step)="bump('temp', $event)"
+          >
+            <span class="value num">{{ tempText() }}</span>
+          </app-stepper>
+        </div>
+        <div class="cell">
+          <span class="label">
+            Давление
+            <button type="button" class="unit-link" (click)="nextPressureUnit()">
+              {{ unitNames[state.pressureUnit()] }} ▾
+            </button>
+          </span>
+          <input
+            class="input num pressure"
+            inputmode="decimal"
+            [attr.aria-label]="'Давление, ' + unitNames[state.pressureUnit()]"
+            [value]="pressureText()"
+            [placeholder]="state.pressureUnit() === 'alt' ? 'м' : ''"
+            (change)="setPressure($event)"
+          />
+        </div>
+        <div class="cell">
+          <span class="label">Ветер, м/с</span>
+          <app-stepper
+            class="mini"
+            minusLabel="Ветер слабее"
+            plusLabel="Ветер сильнее"
+            (step)="bump('windSpeed', $event / 2)"
+          >
+            <span class="value num">{{ numText(state.conditions().windSpeed) }}</span>
+          </app-stepper>
+        </div>
+        <div class="cell">
+          <span class="label">Откуда</span>
+          <button
+            type="button"
+            class="clock-btn"
+            [attr.aria-label]="'Направление ветра: ' + clockText(state.conditions().windClock)"
+            (click)="windOpen.set(true)"
+          >
+            <app-wind-clock [clock]="state.conditions().windClock" />
+            <span>{{ clockText(state.conditions().windClock) }}</span>
+          </button>
+        </div>
+        <p class="source">
+          @if (sourceLabel(); as label) {
+            @if (label.link) {
+              <button type="button" class="text-link" (click)="state.useJournal()">
+                {{ label.text }}
+              </button>
+            } @else {
+              <span>{{ label.text }}</span>
+            }
+            ·
+          }
+          <button
+            type="button"
+            class="text-link"
+            [class.current]="state.source().kind === 'standard'"
+            (click)="state.useStandard()"
+          >
+            стандартная атмосфера
+          </button>
+          ·
+          <button type="button" class="text-link plain" (click)="nextStep()">
+            шаг {{ state.step() }} м ▾
+          </button>
+          ·
+          <button type="button" class="text-link" (click)="moreOpen.set(true)">ещё условия</button>
+        </p>
+      </section>
+
+      @if (state.input()) {
+        @if (offer(); as kind) {
+          <div class="offer">
+            <span>{{ offerText() }}</span>
+            <button type="button" class="btn-small" (click)="acceptFit()">
+              {{ kind === 'accept' ? 'Принять' : 'Обновить' }}
+            </button>
+          </div>
+        }
+
+        <div class="table" [class.extra]="state.extra()">
+          <div class="row titles">
+            <span>м</span>
+            <span class="right">Верт.</span>
+            @if (state.extra()) {
+              <span class="right">V, м/с</span>
+              <span class="right">E, Дж</span>
+              <span class="right">t, с</span>
+              <span class="right">Дер.</span>
+            } @else {
+              <span class="right">Щелч.</span>
+              <span class="right">Ветер</span>
+              <span class="right">V, м/с</span>
+            }
+          </div>
+          @for (row of rows(); track row.d; let odd = $odd) {
+            <div class="row data num" [class.shade]="odd">
+              <span class="dist">
+                {{ row.d }}
+                @if (row.logged) {
+                  <span class="dot" title="есть данные в журнале"></span>
+                }
+              </span>
+              <span class="elev right">{{ row.elev }}</span>
+              @if (!state.extra()) {
+                <span class="clicks right">{{ row.clicks }}</span>
+                <span class="wind right">{{ row.wind }}</span>
+              }
+              <span class="v right" [class.warn]="row.transonic">
+                {{ row.v }}{{ row.transonic ? ' ⚠' : '' }}
+              </span>
+              @if (state.extra()) {
+                <span class="more right">{{ row.energy }}</span>
+                <span class="more right">{{ row.time }}</span>
+                <span class="more right">{{ row.drift }}</span>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="foot">
+          @if (journal().length) {
+            <span>
+              <span class="dot"></span> — есть в журнале{{
+                differences().length ? '; ' + differences().join(', ') : ''
+              }}.
+            </span>
+          }
+          @if (transonic()) {
+            <span class="warn">⚠ — у скорости звука, расчёт менее точен.</span>
+          }
+          @if (subsonicAt(); as d) {
+            <span>С {{ d }} м пуля в дозвуке — дальше строки не показаны.</span>
+          }
+          <span>
+            Поправки — в {{ unitLabel() }}, ветер — на
+            {{ numText(state.conditions().windSpeed) }} м/с{{
+              state.setup()?.base?.spin ? ', с деривацией' : ''
+            }}.
+          </span>
+          @for (note of notes(); track note) {
+            <span class="warn">{{ note }}</span>
+          }
+          @if (state.fit() && !offer()) {
+            <button type="button" class="text-link left" (click)="fitOpen.set(true)">
+              Подобрать V₀ по журналу
+            </button>
+          } @else if (state.fit()) {
+            <button type="button" class="text-link left" (click)="fitOpen.set(true)">
+              Как подобрана скорость
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="empty">
+          <b>Для расчёта нужны БК и скорость</b>
+          <span>
+            БК и модель (G1/G7) — с пачки или с сайта производителя пули. Скорость — с хронографа
+            или с пачки: тогда приложение оценит её для длины вашего ствола.
+          </span>
+        </div>
+      }
+
+      <div class="actions">
+        @if (setup.ammo; as ammo) {
+          <a class="secondary" [routerLink]="['/more/ammo', ammo.id]">Данные патрона</a>
+        }
+        @if (state.input()) {
+          <button type="button" class="secondary" (click)="state.extra.set(!state.extra())">
+            {{ state.extra() ? '◂ Поправки, ветер' : 'Энергия, время ▸' }}
+          </button>
+        } @else {
+          <a class="secondary" [routerLink]="['/more/rifles', setup.rifle.id]">
+            Скорость из этой винтовки
+          </a>
+        }
+      </div>
+    </div>
+  </div>
+
+  @if (sheetOpen()) {
+    <app-card-sheet mode="calc" [data]="setup" (closed)="sheetOpen.set(false)" />
+  }
+
+  @if (windOpen()) {
+    <div class="backdrop" (click)="windOpen.set(false)"></div>
+    <section class="sheet" role="dialog" aria-label="Ветер">
+      <span class="handle"></span>
+      <div class="head"><h2>Ветер</h2></div>
+      <div class="wind-sheet">
+        <app-wind-clock
+          [clock]="state.conditions().windClock"
+          [size]="240"
+          [pickable]="true"
+          (pick)="state.update({ windClock: $event })"
+        />
+        <span class="hint">Откуда дует: 12 — в лицо, 3 — справа, 6 — в спину.</span>
+        <app-stepper
+          minusLabel="Ветер слабее"
+          plusLabel="Ветер сильнее"
+          (step)="bump('windSpeed', $event / 2)"
+        >
+          <span class="big num">{{ numText(state.conditions().windSpeed) }}</span>
+          <span class="hint">м/с · {{ clockText(state.conditions().windClock) }}</span>
+        </app-stepper>
+        <button type="button" class="btn-mark" (click)="windOpen.set(false)">Готово</button>
+      </div>
+    </section>
+  }
+
+  @if (moreOpen()) {
+    <div class="backdrop" (click)="moreOpen.set(false)"></div>
+    <section class="sheet" role="dialog" aria-label="Ещё условия">
+      <span class="handle"></span>
+      <div class="head"><h2>Ещё условия</h2></div>
+      <div class="more-sheet">
+        <span class="section-title">Влажность</span>
+        <app-stepper minusLabel="Суше" plusLabel="Влажнее" (step)="bumpHumidity($event)">
+          <span class="big num">{{ humidityText() }}</span>
+        </app-stepper>
+        <span class="section-title">Угол места</span>
+        <app-stepper minusLabel="Ниже" plusLabel="Выше" (step)="bumpLook($event)">
+          <span class="big num">{{ fmtAngle(state.conditions().lookAngle) }}</span>
+          <span class="hint">вверх +, вниз −</span>
+        </app-stepper>
+        <label class="check">
+          <input
+            type="checkbox"
+            [checked]="state.conditions().coriolis != null"
+            (change)="toggleCoriolis($event)"
+          />
+          Кориолис (заметен после 800 м)
+        </label>
+        @if (state.conditions().coriolis; as coriolis) {
+          <div class="form-grid">
+            <label class="field">
+              Широта, °
+              <input
+                class="num"
+                inputmode="decimal"
+                [value]="numText(coriolis.latitude)"
+                (change)="setCoriolis('latitude', $event)"
+              />
+            </label>
+            <label class="field">
+              Азимут, °
+              <input
+                class="num"
+                inputmode="decimal"
+                [value]="numText(coriolis.azimuth)"
+                (change)="setCoriolis('azimuth', $event)"
+              />
+            </label>
+          </div>
+        }
+        <span class="hint">Влажность и угол места на таблицу влияют мало.</span>
+        <button type="button" class="btn-mark" (click)="moreOpen.set(false)">Готово</button>
+      </div>
+    </section>
+  }
+
+  @if (fitOpen() && state.fit(); as fit) {
+    <app-velocity-fit-sheet
+      [fit]="fit"
+      [v0]="setup.v0"
+      (save)="state.saveFittedVelocity($event); fitOpen.set(false)"
+      (closed)="fitOpen.set(false)"
+    />
+  }
+} @else {
+  <app-ballistics-empty />
+}

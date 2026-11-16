@@ -14,6 +14,7 @@ import {
   Ammo,
   ammoById,
   ammoName,
+  caliberDiameter,
   numText,
   parseNum,
   plural,
@@ -67,7 +68,22 @@ export class AmmoEditPage implements OnInit {
     brass: text(),
     primer: text(),
     coal: text(),
+    bc: text(),
+    dragModel: new FormControl<'G1' | 'G7'>('G1', { nonNullable: true }),
+    bulletWeightGr: text(),
+    bulletDiameterMm: text(),
+    bulletLengthMm: text(),
+    boxVelocity: text(),
+    boxBarrelMm: text(),
+    boxVelocityAt: new FormControl<'muzzle' | 'V10' | 'V25'>('muzzle', { nonNullable: true }),
   });
+
+  protected readonly models = ['G1', 'G7'] as const;
+  protected readonly velocityPoints = [
+    { value: 'muzzle', name: 'дуло' },
+    { value: 'V10', name: 'V10' },
+    { value: 'V25', name: 'V25' },
+  ] as const;
 
   protected readonly error = signal<string | null>(null);
   protected readonly confirmingDelete = signal(false);
@@ -78,6 +94,12 @@ export class AmmoEditPage implements OnInit {
   });
 
   protected readonly type = computed(() => this.value().type);
+
+  /** The diameter the calibre implies, as a hint in the empty field. */
+  protected readonly diameterHint = computed(() => {
+    const d = caliberDiameter(this.value().caliber);
+    return d ? numText(d) : '';
+  });
   protected readonly existing = computed(() => ammoById(this.store.diary(), this.id()));
 
   protected readonly sessionCount = computed(() => {
@@ -136,6 +158,14 @@ export class AmmoEditPage implements OnInit {
       brass: source.brass ?? '',
       primer: source.primer ?? '',
       coal: numText(source.coal),
+      bc: numText(source.bc),
+      dragModel: source.dragModel ?? 'G1',
+      bulletWeightGr: numText(source.bulletWeightGr),
+      bulletDiameterMm: numText(source.bulletDiameterMm),
+      bulletLengthMm: numText(source.bulletLengthMm),
+      boxVelocity: numText(source.boxVelocity),
+      boxBarrelMm: numText(source.boxBarrelMm),
+      boxVelocityAt: source.boxVelocityAt ?? 'muzzle',
     });
     if (!copying) this.original.set(this.form.getRawValue());
   }
@@ -173,6 +203,11 @@ export class AmmoEditPage implements OnInit {
       caliber: v.caliber.trim(),
       notes: v.notes.trim(),
       bullet: v.bullet.trim(),
+      bc: parseNum(v.bc),
+      dragModel: parseNum(v.bc) ? v.dragModel : undefined,
+      bulletWeightGr: parseNum(v.bulletWeightGr),
+      bulletDiameterMm: parseNum(v.bulletDiameterMm),
+      bulletLengthMm: parseNum(v.bulletLengthMm),
       ...(handload
         ? {
             powder: v.powder.trim(),
@@ -182,7 +217,15 @@ export class AmmoEditPage implements OnInit {
             primer: v.primer.trim(),
             coal: parseNum(v.coal),
           }
-        : { maker: v.maker.trim(), line: v.line.trim(), lot: v.lot.trim() }),
+        : {
+            maker: v.maker.trim(),
+            line: v.line.trim(),
+            lot: v.lot.trim(),
+            boxVelocity: parseNum(v.boxVelocity),
+            boxBarrelMm: parseNum(v.boxBarrelMm),
+            boxVelocityAt:
+              parseNum(v.boxVelocity) && v.boxVelocityAt !== 'muzzle' ? v.boxVelocityAt : undefined,
+          }),
     };
     if (
       !fields.name &&

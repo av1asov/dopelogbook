@@ -48,6 +48,89 @@
     <label class="field wide">Пуля<input formControlName="bullet" /></label>
   </div>
 
+  <div class="ballistics">
+    <label class="field">
+      БК
+      <input class="num" formControlName="bc" inputmode="decimal" placeholder="0,000" />
+    </label>
+    <div class="field">
+      Модель
+      <span class="seg model">
+        @for (model of models; track model) {
+          <button
+            type="button"
+            [attr.aria-pressed]="form.controls.dragModel.value === model"
+            (click)="form.controls.dragModel.setValue(model)"
+          >
+            {{ model }}
+          </button>
+        }
+      </span>
+    </div>
+    <label class="field">
+      Масса, gr
+      <input class="num" formControlName="bulletWeightGr" inputmode="decimal" />
+    </label>
+    <label class="field">
+      Диаметр, мм
+      <input
+        class="num"
+        formControlName="bulletDiameterMm"
+        inputmode="decimal"
+        [placeholder]="diameterHint()"
+      />
+    </label>
+    <label class="field span2">
+      Длина пули, мм
+      <input
+        class="num"
+        formControlName="bulletLengthMm"
+        inputmode="decimal"
+        placeholder="для деривации"
+      />
+    </label>
+  </div>
+  <span class="hint">
+    БК — с пачки или с сайта производителя пули. Без пометки на пачке — G1; у G7 для .308 значения
+    ~0,2–0,25, у G1 ~0,4–0,5.
+  </span>
+
+  @if (type() === 'factory') {
+    <div class="ballistics">
+      <label class="field">
+        Скорость, м/с
+        <input
+          class="num"
+          formControlName="boxVelocity"
+          inputmode="decimal"
+          placeholder="с пачки"
+        />
+      </label>
+      <label class="field">
+        Ствол, мм
+        <input class="num" formControlName="boxBarrelMm" inputmode="decimal" placeholder="600" />
+      </label>
+      <div class="field">
+        Замер
+        <span class="seg model">
+          @for (at of velocityPoints; track at.value) {
+            <button
+              type="button"
+              [attr.aria-pressed]="form.controls.boxVelocityAt.value === at.value"
+              (click)="form.controls.boxVelocityAt.setValue(at.value)"
+            >
+              {{ at.name }}
+            </button>
+          }
+        </span>
+      </div>
+    </div>
+    <span class="hint">
+      Скорость с пачки нужна, пока нет своей: приложение пересчитает её на длину вашего ствола
+      (оценка ±20 м/с) и заменит подбором по журналу или хронографом.
+    </span>
+  }
+
   @if (type() === 'handload') {
     <section class="recipe">
       <h2 class="section-title pen">Рецепт</h2>

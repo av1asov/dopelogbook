@@ -11,9 +11,9 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import {
+  Ammo,
   ammoById,
   ammoName,
-  CardData,
   combosOf,
   devicesUsed,
   devName,
@@ -22,6 +22,8 @@ import {
   parseNum,
   restName,
   restsUsed,
+  Rifle,
+  Scope,
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
 import { ViewState } from '../../core/view-state';
@@ -40,7 +42,10 @@ export class CardSheet implements OnInit {
   protected readonly view = inject(ViewState);
   private readonly destroyRef = inject(DestroyRef);
 
-  readonly data = input.required<CardData>();
+  /** The combo on screen: a card, or the calculator's setup. */
+  readonly data = input.required<{ rifle: Rifle; ammo: Ammo | null; scope: Scope | null }>();
+  /** The calculator needs the combo only: no rest, range or PNG choices. */
+  readonly mode = input<'card' | 'calc'>('card');
   readonly closed = output<void>();
 
   protected readonly steps = [25, 50, 100];

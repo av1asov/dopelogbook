@@ -33,11 +33,13 @@ import { SettingsStore } from '../../core/data/settings-store';
 import { saveFile } from '../../core/save-file';
 import { ViewState } from '../../core/view-state';
 import { cardFileName, CardExportOptions, cardText, renderCardPng } from './card-export';
+import { BallisticsHead } from '../ballistics/ballistics-head';
+import { BallisticsState } from '../ballistics/ballistics-state';
 import { CardSheet } from './card-sheet';
 
 @Component({
   selector: 'app-card-page',
-  imports: [CardSheet, RouterLink],
+  imports: [BallisticsHead, CardSheet, RouterLink],
   templateUrl: './card-page.html',
   styleUrl: './card-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -166,6 +168,7 @@ export class CardPage {
   });
 
   constructor() {
+    inject(BallisticsState).tab.set('card');
     this.destroyRef.onDestroy(() => this.closePng());
   }
 

@@ -1,0 +1,144 @@
+.zone-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zone-label {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.zone-seg {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  height: 36px;
+  overflow: hidden;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+}
+
+.zone-seg button {
+  padding: 0;
+  border: 0;
+  background: var(--card-paper);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.zone-seg button + button {
+  border-left: 1px solid var(--ink);
+}
+
+.zone-seg button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--card-paper);
+}
+
+.custom {
+  max-width: 180px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 0.9fr 0.9fr 1.4fr 1.2fr;
+  align-items: baseline;
+}
+
+.titles {
+  padding: 4px 0;
+  border-bottom: 1.5px solid var(--ink);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.data {
+  width: calc(100% + 8px);
+  min-height: 44px;
+  margin: 0 -4px;
+  padding: 6px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.data.on {
+  background: var(--mark);
+  color: var(--mark-ink);
+}
+
+.near {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tag {
+  padding: 0 3px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-family: var(--f-body);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+
+.tag.dim {
+  color: var(--ink-2);
+}
+
+.data.on .tag.dim {
+  color: inherit;
+}
+
+.mpbr {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.mpbr small {
+  white-space: nowrap;
+  font-family: var(--f-body);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.data.on .warn {
+  color: #7a3f06;
+}
+
+.fact {
+  color: var(--ok);
+}
+
+.data.on .fact {
+  color: #1d5e30;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.ok {
+  color: var(--ok);
+}

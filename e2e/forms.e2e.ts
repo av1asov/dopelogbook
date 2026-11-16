@@ -113,3 +113,34 @@ test('Карта · связка', async ({ page }) => {
   await page.getByRole('button', { name: 'Выбрать патрон, прицел и опору' }).click();
   await expectTidyFields(page, 'Карта · связка');
 });
+
+test('Баллистика · расчёт', async ({ page }) => {
+  await openFirst(page, '/more/ammo', 'a.title-row');
+  await page.getByLabel('БК').fill('0,243');
+  await page.getByRole('button', { name: 'G7' }).click();
+  await expectTidyFields(page, 'Патрон · баллистика');
+  await page.getByRole('button', { name: 'Готово' }).click();
+  await page.goto('/ballistics/calc');
+  await expect(page.getByRole('tab', { name: 'Расчёт' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.row.data').first()).toBeVisible();
+  await expectTidyFields(page, 'Баллистика · расчёт');
+  await page.getByRole('button', { name: 'ещё условия' }).click();
+  await page.getByRole('checkbox', { name: /Кориолис/ }).check();
+  await expectTidyFields(page, 'Баллистика · ещё условия', '.sheet');
+});
+
+test('Баллистика · MPBR', async ({ page }) => {
+  await openFirst(page, '/more/ammo', 'a.title-row');
+  await page.getByLabel('БК').fill('0,243');
+  await page.getByRole('button', { name: 'Готово' }).click();
+  await page.goto('/ballistics/mpbr');
+  await page.getByRole('button', { name: 'своя' }).click();
+  await expect(page.getByRole('button', { name: /опт\./ })).toHaveAttribute('aria-pressed', 'true');
+  await expectTidyFields(page, 'Баллистика · MPBR');
+});
+
+test('Винтовка · ствол', async ({ page }) => {
+  await openFirst(page, '/more/rifles', 'a.card');
+  await page.getByLabel('Ствол, мм').fill('560');
+  await expectTidyFields(page, 'Винтовка · ствол');
+});

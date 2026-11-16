@@ -1,0 +1,155 @@
+.conditions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  background: var(--sheet);
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.label {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.unit-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pen);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Same 44 pt targets as the range, with a smaller number: four of them share the panel. */
+.mini .value {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.pressure {
+  font-weight: 700;
+  text-align: center;
+}
+
+.clock-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 6px 0 2px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: var(--card-paper);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.source {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 64px repeat(4, minmax(0, 1fr));
+  align-items: baseline;
+}
+
+/* Energy, time and drift take the places of clicks and wind. */
+.extra .row {
+  grid-template-columns: 58px repeat(5, minmax(0, 1fr));
+}
+
+.extra .elev {
+  font-size: 20px;
+}
+
+.extra .v,
+.more {
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.titles {
+  padding: 6px 0 4px;
+  border-bottom: 1.5px solid var(--ink);
+  background: var(--card-paper);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.data {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rule);
+  background: var(--card-paper);
+  font-variant-numeric: tabular-nums;
+}
+
+.data.shade {
+  background: var(--card-shade);
+}
+
+.dist {
+  font-size: 22px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.elev {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.clicks {
+  font-size: 19px;
+}
+
+.wind {
+  color: var(--ink-2);
+  font-size: 18px;
+}
+
+.v {
+  color: var(--ink-2);
+  font-size: 16px;
+}
+
+.v.warn {
+  color: var(--warn);
+}
+
+.wind-sheet,
+.more-sheet {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.wind-sheet app-wind-clock {
+  align-self: center;
+}
