@@ -4,6 +4,7 @@ import {
   boxToMuzzle,
   distances,
   estimateV0,
+  factMpbr,
   fitVelocity,
   FitPoint,
   mpbr,
@@ -128,6 +129,32 @@ describe('mpbr', () => {
     const points = profile(MATCH, result.optimal.angle, 240);
     expect(points[0]).toEqual({ d: 0, h: -45 });
     expect(Math.max(...points.map((p) => p.h))).toBeCloseTo(50, 0);
+  });
+
+  describe('fact from the journal', () => {
+    const line = mpbr(MATCH, 100).current!;
+    const calc = profile(MATCH, line.angle, 300);
+    const at = (d: number) => calc.find((p) => p.d === d)!.h;
+
+    it('equals the calculated MPBR when the journal matches the curve at 100 and 200 m', () => {
+      expect(line.mpbr!).toBeGreaterThan(100);
+      expect(line.mpbr!).toBeLessThan(200);
+      const journal = [100, 200].map((d) => ({ d, h: at(d) }));
+      expect(Math.abs(factMpbr(calc, journal, 50)! - line.mpbr!)).toBeLessThanOrEqual(2);
+    });
+
+    it('comes in shorter when the journal is lower than the curve', () => {
+      const journal = [
+        { d: 100, h: at(100) },
+        { d: 200, h: at(200) - 18 },
+      ];
+      expect(factMpbr(calc, journal, 50)!).toBeLessThan(line.mpbr! - 2);
+    });
+
+    it('is not given without journal points past the exit', () => {
+      const journal = [50, 100].map((d) => ({ d, h: at(d) }));
+      expect(factMpbr(calc, journal, 50)).toBeNull();
+    });
   });
 });
 

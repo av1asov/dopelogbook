@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import {
   clickOf,
+  factMpbr,
   fmt,
   JournalPoint,
   journalPoints,
@@ -97,16 +98,13 @@ export class MpbrPage {
     }));
   }
 
-  /** Where the journal heights drop through −radius, when there are points on both sides. */
-  private factExit(facts: readonly ChartFact[], radius: number): number | null {
-    for (let i = 1; i < facts.length; i++) {
-      const a = facts[i - 1];
-      const b = facts[i];
-      if (a.h >= -radius && b.h < -radius) {
-        return a.d + ((-radius - a.h) / (b.h - a.h)) * (b.d - a.d);
-      }
-    }
-    return null;
+  /** The calculated curve corrected by the journal's miss, crossing −radius (spec: «факт»). */
+  private factExit(line: MpbrLine, facts: readonly ChartFact[], radius: number): number | null {
+    const data = this.result();
+    if (!data || facts.length < 2) return null;
+    const last = facts[facts.length - 1].d;
+    const calc = profile(data.input, line.angle, Math.ceil(last / 2) * 2);
+    return factMpbr(calc, facts, radius);
   }
 
   protected readonly rows = computed((): Row[] => {
@@ -116,7 +114,7 @@ export class MpbrPage {
     const zeroAngle = result.current?.angle ?? null;
     const make = (key: string, line: MpbrLine, tag: Row['tag']): Row => {
       const facts = this.factsFor(line, zeroAngle);
-      return { key, line, tag, facts, fact: this.factExit(facts, result.radius) };
+      return { key, line, tag, facts, fact: this.factExit(line, facts, result.radius) };
     };
     const rows = [
       ...result.nears.map((n) => make(`near:${n.dist}`, n.line, '')),
