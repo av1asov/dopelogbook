@@ -6,7 +6,7 @@ import { SeriesSummary } from './share-text';
 /** 4:5 — messengers show it whole, without cropping. */
 export const SHARE_WIDTH = 1080;
 export const SHARE_HEIGHT = 1350;
-const PHOTO_HEIGHT = 1000;
+export const PHOTO_HEIGHT = 1000;
 
 const FONTS = [
   '800 40px Tektur',
@@ -36,6 +36,15 @@ export interface ShareShot {
   target?: TargetOverlay | null;
   /** Bullet diameter: holes are ringed at this size. */
   holeMm?: number;
+  /** The printed target from its template: the picture is cut to it. */
+  printed?: PrintedTarget | null;
+}
+
+export interface PrintedTarget {
+  /** Across its outer element, mm. */
+  size: number;
+  /** Point of aim from the centre, mm, up and right positive. */
+  aim?: { up: number; right: number } | null;
 }
 
 /** The part of the target plane on the picture, mm, and its scale. */
@@ -48,11 +57,22 @@ interface Frame {
   toImage: (p: Point) => Point;
 }
 
+/** Around a target of unknown size: the target, not just the group, should show. */
+const UNKNOWN_TARGET_MM = 200;
+/** Paper around the printed target. */
+const TARGET_MARGIN = 1.2;
+/** Room beyond the farthest hole for its ring, mm. */
+const HOLE_ROOM_MM = 12;
+
 /**
- * Around the holes and the point of aim, with room for the marks: never closer than 80 mm
- * across, so a tight group still shows the target around it.
+ * The whole target: centred on the printed target and cut to its size, from the template.
+ * The holes and the point of aim always fit, and without a template it is 200 mm at least.
  */
-function frameOf(marks: PhotoMarks, target: TargetOverlay): Frame | null {
+export function frameOf(
+  marks: PhotoMarks,
+  target: TargetOverlay,
+  printed?: PrintedTarget | null,
+): Frame | null {
   const toPlane = toMillimetres(marks);
   const points = [...target.holes, target.aim, target.centre]
     .filter((p): p is Point => !!p)
@@ -60,10 +80,19 @@ function frameOf(marks: PhotoMarks, target: TargetOverlay): Frame | null {
   if (!points.length) return null;
   const xs = points.map((p) => p.x);
   const ys = points.map((p) => p.y);
-  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-  const extent = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-  const width = Math.max(extent * 2.2, 80);
+  const aim = target.aim && toPlane(target.aim);
+  // The aim sits off the centre of some printed targets; plane y grows downwards.
+  const { x: cx, y: cy } =
+    printed && aim
+      ? { x: aim.x - (printed.aim?.right ?? 0), y: aim.y + (printed.aim?.up ?? 0) }
+      : {
+          x: (Math.min(...xs) + Math.max(...xs)) / 2,
+          y: (Math.min(...ys) + Math.max(...ys)) / 2,
+        };
+  const half = ((printed?.size ?? UNKNOWN_TARGET_MM) * TARGET_MARGIN) / 2;
+  const halfX = Math.max(half, ...xs.map((x) => Math.abs(x - cx) + HOLE_ROOM_MM));
+  const halfY = Math.max(half, ...ys.map((y) => Math.abs(y - cy) + HOLE_ROOM_MM));
+  const width = Math.max(halfX * 2, (halfY * 2 * SHARE_WIDTH) / PHOTO_HEIGHT);
   const height = (width * PHOTO_HEIGHT) / SHARE_WIDTH;
   let toImage: (p: Point) => Point;
   if (marks.homography) {
@@ -137,10 +166,10 @@ function drawStraight(g: CanvasRenderingContext2D, source: ImageData, frame: Fra
   g.putImageData(out, 0, 0);
 }
 
-/** A photo without marks: the middle of it, filling the frame. */
-async function drawCovered(g: CanvasRenderingContext2D, photo: Blob): Promise<void> {
+/** A photo without marks: all of it, on paper where it is narrower than the frame. */
+async function drawWhole(g: CanvasRenderingContext2D, photo: Blob): Promise<void> {
   const bitmap = await createImageBitmap(photo);
-  const scale = Math.max(SHARE_WIDTH / bitmap.width, PHOTO_HEIGHT / bitmap.height);
+  const scale = Math.min(SHARE_WIDTH / bitmap.width, PHOTO_HEIGHT / bitmap.height);
   const w = bitmap.width * scale;
   const h = bitmap.height * scale;
   g.drawImage(bitmap, (SHARE_WIDTH - w) / 2, (PHOTO_HEIGHT - h) / 2, w, h);
@@ -322,7 +351,7 @@ export async function renderPhotoLayer(
   const g = canvas.getContext('2d') as CanvasRenderingContext2D;
   g.fillStyle = COLOURS.paper;
   g.fillRect(0, 0, SHARE_WIDTH, PHOTO_HEIGHT);
-  const frame = shot.marks && shot.target ? frameOf(shot.marks, shot.target) : null;
+  const frame = shot.marks && shot.target ? frameOf(shot.marks, shot.target, shot.printed) : null;
   if (frame) {
     drawStraight(g, await pixelsOf(shot.photo), frame);
     if (withMarks) {
@@ -330,7 +359,7 @@ export async function renderPhotoLayer(
       drawMarks(g, frame, shot);
     }
   } else {
-    await drawCovered(g, shot.photo);
+    await drawWhole(g, shot.photo);
   }
   return canvas;
 }
