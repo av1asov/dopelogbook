@@ -53,9 +53,10 @@
           />
 
           <div class="row titles">
-            <span>Ближн.</span>
-            <span>Дальн.</span>
-            <span>Макс. ≤ {{ fmt(radius() / 10, radius() % 10 ? 1 : 0) }} · м</span>
+            <span>Щелч.</span>
+            <span class="right">На {{ zeroDist() }} м</span>
+            <span class="right">Дальн.</span>
+            <span class="right">Выше всего</span>
             <span class="right">MPBR</span>
           </div>
           @for (r of rows(); track r.key) {
@@ -66,20 +67,21 @@
               [attr.aria-pressed]="r.key === row.key"
               (click)="select(r.key)"
             >
-              <span class="near">
-                {{ fmt(r.line.near ?? 0, 0) }}
-                @if (r.tag) {
-                  <span class="tag" [class.dim]="r.tag === 'сейчас'">{{ r.tag }}</span>
+              <span class="clicks">
+                {{ clicksText(r.clicks) }}
+                @for (tag of r.tags; track tag) {
+                  <span class="tag" [class.dim]="tag === 'сейчас'">{{ tag }}</span>
                 }
               </span>
-              <span>{{ r.line.far != null ? fmt(r.line.far, 0) : '—' }}</span>
-              <span [class.warn]="r.line.above">{{ peakText(r.line) }}</span>
+              <span class="right">{{ atZeroText(r) }}</span>
+              <span class="right">{{ r.line.far != null ? fmt(r.line.far, 0) : '—' }}</span>
+              <span class="peak right" [class.warn]="r.line.above">{{ peakText(r.line) }}</span>
               <span class="mpbr right" [class.warn]="r.line.above">
                 @if (r.line.above; as above) {
                   —
                   <small>над зоной {{ fmt(above[0], 0) }}–{{ fmt(above[1], 0) }}</small>
                 } @else {
-                  {{ r.line.mpbr != null ? fmt(r.line.mpbr, 0) : '—' }}
+                  {{ farText(r.line) }}
                   @if (r.fact != null) {
                     <small class="fact">факт ≈{{ round5(r.fact) }}</small>
                   }
@@ -89,9 +91,13 @@
           }
           <span class="legend">
             <span>— расчёт</span>
+            @if (ghost()) {
+              <span>┄ сейчас</span>
+            }
             @if (row.facts.length) {
               <span class="ok">◆ журнал (±полщелчка)</span>
             }
+            <span>см на {{ zeroDist() }} м — где СТП при пристрелке</span>
             <span>касание строки — её траектория</span>
           </span>
 

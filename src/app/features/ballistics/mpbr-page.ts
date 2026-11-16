@@ -7,11 +7,13 @@ import {
   journalPoints,
   mpbr,
   MpbrLine,
+  fmtSigned,
+  MpbrRow,
   numText,
   parseNum,
+  plural,
   profile,
   toMrad,
-  toUnits,
   unitsOf,
 } from '../../core/ballistics';
 import { DiaryStore } from '../../core/data/diary-store';
@@ -20,13 +22,13 @@ import { CardSheet } from '../card/card-sheet';
 import { BallisticsEmpty } from './ballistics-empty';
 import { BallisticsHead } from './ballistics-head';
 import { BallisticsState, ZONES } from './ballistics-state';
-import { ChartFact, ChartPoint, MpbrChart } from './mpbr-chart';
+import { MpbrChart } from './mpbr-chart';
+import { ChartFact, ChartPoint, entryText, rangeText } from './mpbr-labels';
 import { VelocityFitSheet } from './velocity-fit-sheet';
 
-interface Row {
+interface Row extends MpbrRow {
   key: string;
-  line: MpbrLine;
-  tag: 'опт.' | 'сейчас' | '';
+  tags: ('сейчас' | 'опт.')[];
   /** Where the bullet really leaves the zone by the journal, m. */
   fact: number | null;
   /** Heights of the journal moved to this zero, mm. */
@@ -69,12 +71,14 @@ export class MpbrPage {
   protected readonly custom = computed(() => !ZONES.includes(this.state.zone()));
   protected readonly editingZone = signal(false);
 
+  private readonly scope = computed(() => this.state.setup()?.scope ?? null);
+  /** One click of the combo's scope, mrad. */
+  private readonly click = computed(() => toMrad(clickOf(this.scope()), unitsOf(this.scope())));
+
   private readonly result = computed(() => {
     const input = this.state.input();
-    return input ? { input, result: mpbr(input, this.state.zone()) } : null;
+    return input ? { input, result: mpbr(input, this.state.zone(), this.click()) } : null;
   });
-
-  private readonly scope = computed(() => this.state.setup()?.scope ?? null);
 
   private readonly journal = computed((): JournalPoint[] => {
     const setup = this.state.setup();
@@ -90,7 +94,7 @@ export class MpbrPage {
   private factsFor(line: MpbrLine, zeroAngle: number | null): ChartFact[] {
     if (zeroAngle == null) return [];
     const shift = (line.angle - zeroAngle) * 1000;
-    const halfClick = toMrad(clickOf(this.scope()), unitsOf(this.scope())) / 2;
+    const halfClick = this.click() / 2;
     return this.journal().map((p) => ({
       d: p.d,
       h: (-p.elev + shift) * p.d,
@@ -112,28 +116,36 @@ export class MpbrPage {
     if (!data) return [];
     const { result } = data;
     const zeroAngle = result.current?.angle ?? null;
-    const make = (key: string, line: MpbrLine, tag: Row['tag']): Row => {
-      const facts = this.factsFor(line, zeroAngle);
-      return { key, line, tag, facts, fact: this.factExit(line, facts, result.radius) };
-    };
-    const rows = [
-      ...result.nears.map((n) => make(`near:${n.dist}`, n.line, '')),
-      make('optimal', result.optimal, 'опт.'),
-      ...(result.current ? [make('current', result.current, 'сейчас')] : []),
-    ];
-    return rows.sort((a, b) => (a.line.near ?? 0) - (b.line.near ?? 0));
+    return result.rows.map((row) => {
+      const facts = this.factsFor(row.line, zeroAngle);
+      const tags: Row['tags'] = [];
+      if (row.clicks === 0) tags.push('сейчас');
+      if (row.clicks === result.best) tags.push('опт.');
+      return {
+        ...row,
+        key: `click:${row.clicks}`,
+        tags,
+        facts,
+        fact: this.factExit(row.line, facts, result.radius),
+      };
+    });
   });
 
+  /** The tapped row while it is in the table, else the best one. */
   protected readonly selected = computed(() => {
     const rows = this.rows();
+    const best = this.result()?.result.best;
     return (
-      rows.find((r) => r.key === this.state.mpbrRow()) ?? rows.find((r) => r.key === 'optimal')
+      rows.find((r) => r.key === this.state.mpbrRow()) ??
+      rows.find((r) => r.clicks === best) ??
+      rows.find((r) => r.clicks === 0)
     );
   });
 
   /** 0…MPBR + 20 % of the longest valid range, so every row fits the same axis. */
   protected readonly axis = computed(() => {
-    const best = this.result()?.result.optimal.mpbr ?? 200;
+    const ranges = this.rows().flatMap((r) => (!r.line.above && r.line.mpbr ? [r.line.mpbr] : []));
+    const best = ranges.length ? Math.max(...ranges) : 200;
     return Math.ceil((best * 1.2) / 10) * 10;
   });
 
@@ -147,10 +159,11 @@ export class MpbrPage {
     return row ? this.profileOf(row.line) : [];
   });
 
+  /** The zero now, dashed, when another row is chosen. */
   protected readonly ghost = computed(() => {
     const row = this.selected();
-    const optimal = this.result()?.result.optimal;
-    return row && optimal && row.key !== 'optimal' ? this.profileOf(optimal) : null;
+    const current = this.result()?.result.current;
+    return row && current && row.clicks !== 0 ? this.profileOf(current) : null;
   });
 
   protected readonly radius = computed(() => this.result()?.result.radius ?? 50);
@@ -180,33 +193,73 @@ export class MpbrPage {
     return `На ${worst.d} м журнал ${side} расчёта на ${fmt(Math.abs(worst.diff) / 10, 1)} см — по факту MPBR ≈${round5(row.fact)} м.`;
   });
 
-  /** «Чтобы стрелять с MPBR 204 м: на 100 м попадание на 5,0 см выше …» */
+  /**
+   * «Как пристрелять: на 100 м поднять прицел на 5 щелчков и проверить, что СТП на +5,0 см выше
+   * точки прицеливания. Ближний ноль — 33 м (точность низкая), дальний — 168 м. MPBR 3–194 м.»
+   */
   protected readonly practical = computed(() => {
     const row = this.selected();
     const setup = this.state.setup();
-    const current = this.result()?.result.current;
     if (!row || !setup) return null;
-    if (row.key === 'current') return 'Это ваш нынешний ноль.';
-    const zeroDist = setup.zeroDist;
-    const at = heightAt(this.points(), zeroDist);
-    if (at == null || !current) return null;
-    const units = unitsOf(setup.scope);
-    const clicks = Math.round(
-      toUnits((row.line.angle - current.angle) * 1000, units) / clickOf(setup.scope),
-    );
-    const where = at >= 0 ? 'выше' : 'ниже';
-    const goal =
-      row.line.above || row.line.mpbr == null
-        ? 'Для этого нуля'
-        : `Чтобы стрелять с MPBR ${fmt(row.line.mpbr, 0)} м`;
-    const dial = clicks ? `${clicks > 0 ? '↑' : '↓'}${Math.abs(clicks)} щелч.` : 'без щелчков';
-    return `${goal}: на ${zeroDist} м попадание на ${fmt(Math.abs(at) / 10, 1)} см ${where} точки прицеливания — от нынешнего нуля это ${dial}`;
+    const { near, far } = row.line;
+    const zeros = [
+      // A centimetre at 33 m is 0,3 mrad: good for a rough check on a short range only.
+      near != null ? `Ближний ноль — ${fmt(near, 0)} м (точность низкая)` : '',
+      far != null ? `дальний — ${fmt(far, 0)} м` : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const range = !row.line.above && row.line.mpbr != null ? `MPBR ${rangeText(row.line)} м.` : '';
+    return [this.dialText(row, setup.zeroDist), zeros ? `${zeros}.` : '', range]
+      .filter(Boolean)
+      .join(' ');
   });
 
+  private dialText(row: MpbrRow, zeroDist: number): string {
+    if (row.clicks === 0) return 'Это ваш нынешний ноль.';
+    const n = Math.abs(row.clicks);
+    const dial = `${row.clicks > 0 ? 'поднять' : 'опустить'} прицел на ${n} ${plural(n, 'щелчок', 'щелчка', 'щелчков')}`;
+    if (!isFinite(row.atZero)) return `Как пристрелять: ${dial}.`;
+    const where = row.atZero >= 0 ? 'выше' : 'ниже';
+    return `Как пристрелять: на ${zeroDist} м ${dial} и проверить, что СТП на ${this.atZeroText(row)} см ${where} точки прицеливания.`;
+  }
+
+  protected readonly zeroDist = computed(() => this.state.setup()?.zeroDist ?? 100);
+
+  /** «+5,0», cm; «0» for the zero now. */
+  protected atZeroText(row: MpbrRow): string {
+    if (!isFinite(row.atZero)) return '—';
+    return Math.abs(row.atZero) < 0.5 ? '0' : fmtSigned(row.atZero / 10, 1);
+  }
+
+  protected clicksText(clicks: number): string {
+    return clicks > 0 ? `↑${clicks}` : clicks < 0 ? `↓${-clicks}` : '0';
+  }
+
+  /** The table shows the far end only, «194*», with the near one in {@link sightNote}. */
+  protected farText(line: MpbrLine): string {
+    if (line.mpbr == null) return '—';
+    return fmt(line.mpbr, 0) + (line.entry != null ? '*' : '');
+  }
+
+  /** «* MPBR от 3 м: прицел выше половины зоны …» under the table. */
   protected readonly sightNote = computed(() => {
     const data = this.result();
     if (!data?.result.sightBelowZone) return null;
-    return `Прицел выше половины зоны (${numText(data.input.sightHeight)} мм > ${fmt(this.radius(), 0)}): первые метры пуля идёт ниже зоны.`;
+    const entries = [
+      ...new Set(
+        this.rows().flatMap((r) =>
+          r.line.entry != null && r.line.mpbr != null && !r.line.above
+            ? [Number(entryText(r.line.entry))]
+            : [],
+        ),
+      ),
+    ].sort((a, b) => a - b);
+    const why = `прицел выше половины зоны (${numText(data.input.sightHeight)} мм > ${fmt(this.radius(), 0)}), первые метры пуля идёт ниже неё.`;
+    if (!entries.length) return why[0].toUpperCase() + why.slice(1);
+    const from =
+      entries.length > 1 ? `${entries[0]}–${entries[entries.length - 1]}` : `${entries[0]}`;
+    return `* MPBR от ${from} м: ${why}`;
   });
 
   protected pickZone(mm: number): void {

@@ -71,8 +71,8 @@ export class BallisticsState {
   readonly pressureUnit = signal<PressureUnit>('mmHg');
   /** mm */
   readonly zone = signal(100);
-  /** The MPBR row picked by a tap: 'optimal', 'current' or 'near:30'. */
-  readonly mpbrRow = signal('optimal');
+  /** The MPBR row picked by a tap, 'click:5'; the best row until one is tapped. */
+  readonly mpbrRow = signal<string | null>(null);
   /** Null while the conditions follow the latest session. */
   private readonly own = signal<{ value: Conditions; source: ConditionsSource } | null>(null);
 

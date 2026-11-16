@@ -107,21 +107,63 @@ describe('mpbr', () => {
     }
   });
 
-  it('gives the longest range for the optimal zero, and flags rows over the zone', () => {
-    const result = mpbr(MATCH, 100);
-    const best = result.optimal.mpbr as number;
-    for (const { line } of result.nears) {
-      if (!line.above) expect(line.mpbr).toBeLessThanOrEqual(best + 0.5);
-    }
-    const close = result.nears.find((n) => n.dist === 25)?.line;
-    expect(close?.above).not.toBeNull();
-    expect(close?.peak.h).toBeGreaterThan(50);
+  it('steps the scope up a click at a time to the first row over the zone', () => {
+    const result = mpbr(MATCH, 100, 0.1);
+    const clicks = result.rows.map((r) => r.clicks);
+    expect(clicks[0]).toBe(0);
+    expect(clicks).toEqual(clicks.map((_, i) => i));
+    const last = result.rows[result.rows.length - 1];
+    expect(last.line.above).not.toBeNull();
+    expect(result.rows.slice(0, -1).every((r) => !r.line.above)).toBe(true);
+    expect(result.best).toBe(last.clicks - 1);
     expect(result.current?.far).toBeCloseTo(100, 0);
+  });
+
+  it('puts the point of impact at the zero distance N clicks higher', () => {
+    const result = mpbr(MATCH, 100, 0.1);
+    expect(result.rows[0].atZero).toBeCloseTo(0, 0);
+    for (const row of result.rows) expect(row.atZero).toBeCloseTo(row.clicks * 0.1 * 100, 0);
+  });
+
+  it('keeps every row under the continuous optimum and the best one close to it', () => {
+    const result = mpbr(MATCH, 100, 0.1);
+    const best = result.rows.find((r) => r.clicks === result.best)!.line;
+    expect(best.peak.h).toBeLessThanOrEqual(50.5);
+    for (const { line } of result.rows) {
+      if (!line.above) expect(line.mpbr!).toBeLessThanOrEqual(result.optimal.mpbr! + 0.5);
+    }
+    expect(result.optimal.mpbr! - best.mpbr!).toBeLessThan(10);
+  });
+
+  it('goes two clicks at a time with a click finer than 0,1 mrad', () => {
+    const quarterMoa = 0.0727;
+    const clicks = mpbr(MATCH, 100, quarterMoa).rows.map((r) => r.clicks);
+    expect(clicks.every((n) => n % 2 === 0)).toBe(true);
+  });
+
+  it('steps down when the zero now is already over the zone', () => {
+    const result = mpbr({ ...MATCH, zeroDist: 250 }, 100, 0.1);
+    const clicks = result.rows.map((r) => r.clicks);
+    expect(clicks[clicks.length - 1]).toBe(0);
+    expect(clicks[0]).toBeLessThan(0);
+    expect(result.rows[0].line.above).toBeNull();
+    expect(result.rows.slice(1).every((r) => r.line.above)).toBe(true);
+    expect(result.best).toBe(clicks[0]);
   });
 
   it('notes a sight higher than the radius', () => {
     expect(mpbr({ ...MATCH, sightHeight: 60 }, 100).sightBelowZone).toBe(true);
     expect(mpbr(MATCH, 100).sightBelowZone).toBe(false);
+  });
+
+  it('starts the range where the bullet rises into the zone when the sight is over the radius', () => {
+    for (const row of mpbr(MATCH, 100).rows) expect(row.line.entry).toBeNull();
+    for (const { line } of mpbr({ ...MATCH, sightHeight: 60 }, 100).rows) {
+      if (line.mpbr == null) continue;
+      expect(line.entry!).toBeGreaterThan(0);
+      expect(line.entry!).toBeLessThan(line.near!);
+      expect(line.entry!).toBeLessThan(10);
+    }
   });
 
   it('starts the profile at the muzzle, under the line of sight', () => {

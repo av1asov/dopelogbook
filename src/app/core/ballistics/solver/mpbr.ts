@@ -1,12 +1,4 @@
-import {
-  angleForZero,
-  BallisticInput,
-  distances,
-  Env,
-  integrate,
-  levelEnv,
-  zeroAngle,
-} from './trajectory';
+import { BallisticInput, distances, Env, integrate, levelEnv, zeroAngle } from './trajectory';
 
 /** One trajectory read against the kill zone; heights are mm over the line of sight. */
 export interface MpbrLine {
@@ -17,28 +9,52 @@ export interface MpbrLine {
   /** Where it crosses it coming down, m. */
   far: number | null;
   peak: { h: number; d: number };
+  /**
+   * Where it rises into the zone, m: past the muzzle only when the sight is higher than the
+   * radius, so the point-blank range is «3–194 м»; null when it starts inside.
+   */
+  entry: number | null;
   /** Where it drops out of the zone below, m; null beyond reach. */
   mpbr: number | null;
   /** Where it flies over the zone, m, when the peak is higher than the radius. */
   above: readonly [number, number] | null;
 }
 
+/** «Raise the scope N clicks»: a zero you can set on the scope, unlike a near zero of 32,4 m. */
+export interface MpbrRow {
+  /** Clicks from the scope's zero now, up positive. */
+  clicks: number;
+  line: MpbrLine;
+  /** mm over the point of aim at the scope's zero distance: what to check when zeroing. */
+  atZero: number;
+}
+
 export interface MpbrResult {
   /** mm */
   radius: number;
-  /** The peak is exactly the radius: the longest point-blank range. */
+  /**
+   * The peak is exactly the radius: the longest point-blank range, not a whole number of clicks.
+   * Never drawn — it cannot be set on the scope; the table marks the best whole row «опт.».
+   */
   optimal: MpbrLine;
-  /** Zeroed so that the near zero is at each distance asked for. */
-  nears: { dist: number; line: MpbrLine }[];
   /** The scope as it is zeroed now. */
   current: MpbrLine | null;
+  /**
+   * Up a click at a time from the zero now, to the first row over the zone; down instead, to the
+   * first row inside it, when the zero now is already over the zone. Sorted by clicks.
+   */
+  rows: MpbrRow[];
+  /** Clicks of the row with the most clicks that keeps the peak inside the zone. */
+  best: number | null;
   /** The sight is higher than the radius: the first metres are under the zone. */
   sightBelowZone: boolean;
 }
 
-export const NEAR_ZEROS: readonly number[] = [25, 30, 35, 40];
 const REACH = 1000;
 const STEPS = distances(1, REACH);
+/** A click finer than this goes two at a time, mrad. */
+const FINE_CLICK = 0.1;
+const MAX_ROWS = 40;
 /** m */
 const ABOVE_TOLERANCE = 0.0005;
 
@@ -47,6 +63,7 @@ function trace(e: Env, angle: number, radius: number): MpbrLine {
   let prev = { h: -e.sight, d: 0 };
   let near: number | null = null;
   let far: number | null = null;
+  let entry: number | null = null;
   let mpbr: number | null = null;
   let overFrom: number | null = null;
   let overTo: number | null = null;
@@ -59,7 +76,8 @@ function trace(e: Env, angle: number, radius: number): MpbrLine {
     else if (overFrom != null && overTo == null && prev.h > radius && s.h <= radius) {
       overTo = cross(radius);
     }
-    // Rising from under the zone at the muzzle is not leaving it.
+    // Rising from under the zone at the muzzle is entering it, not leaving it.
+    if (entry == null && prev.h < -radius && s.h >= -radius) entry = cross(-radius);
     if (prev.h >= -radius && s.h < -radius) mpbr = cross(-radius);
     prev = s;
     return mpbr != null;
@@ -69,6 +87,7 @@ function trace(e: Env, angle: number, radius: number): MpbrLine {
     near,
     far,
     peak: { h: peak.h * 1000, d: peak.d },
+    entry,
     mpbr,
     // The optimal line touches the top of the zone; a fraction of a millimetre is not over it.
     above:
@@ -90,24 +109,46 @@ function optimalAngle(e: Env, radius: number): number {
   return (lo + hi) / 2;
 }
 
-/** Point-blank range for a kill zone `zoneDiameterMm` across. Level shot, no wind. */
-export function mpbr(
-  input: BallisticInput,
-  zoneDiameterMm: number,
-  nears: readonly number[] = NEAR_ZEROS,
-): MpbrResult {
+/** Rows of whole clicks from `zero`; see {@link MpbrResult.rows}. */
+function clickRows(
+  e: Env,
+  zero: number,
+  zeroDist: number,
+  radius: number,
+  clickMrad: number,
+): MpbrRow[] {
+  const step = clickMrad < FINE_CLICK - 1e-9 ? 2 : 1;
+  const row = (clicks: number): MpbrRow => {
+    const angle = zero + (clicks * clickMrad) / 1000;
+    const [at] = integrate(e, angle, [zeroDist]);
+    return { clicks, line: trace(e, angle, radius), atZero: at ? at.h * 1000 : NaN };
+  };
+  const rows = [row(0)];
+  const up = !rows[0].line.above;
+  for (let n = 1; rows.length < MAX_ROWS; n++) {
+    const next = row((up ? n : -n) * step);
+    rows.push(next);
+    if (up ? next.line.above : !next.line.above) break;
+  }
+  return rows.sort((a, b) => a.clicks - b.clicks);
+}
+
+/**
+ * Point-blank range for a kill zone `zoneDiameterMm` across, by whole clicks of `clickMrad` from
+ * the scope's zero. Level shot, no wind.
+ */
+export function mpbr(input: BallisticInput, zoneDiameterMm: number, clickMrad = 0.1): MpbrResult {
   const e = levelEnv(input);
   const radius = zoneDiameterMm / 2000;
-  const nearLines = nears.flatMap((dist) => {
-    const angle = angleForZero(input, dist);
-    return angle == null ? [] : [{ dist, line: trace(e, angle, radius) }];
-  });
-  const current = zeroAngle(input);
+  const zero = zeroAngle(input);
+  const rows = zero == null ? [] : clickRows(e, zero, input.zeroDist, radius, clickMrad);
+  const inside = rows.filter((r) => !r.line.above);
   return {
     radius: radius * 1000,
     optimal: trace(e, optimalAngle(e, radius), radius),
-    nears: nearLines,
-    current: current == null ? null : trace(e, current, radius),
+    current: rows.find((r) => r.clicks === 0)?.line ?? null,
+    rows,
+    best: inside.length ? inside[inside.length - 1].clicks : null,
     sightBelowZone: input.sightHeight > radius * 1000,
   };
 }
