@@ -1,3 +1,4 @@
+export * from './calculator';
 export * from './chart';
 export * from './diary';
 export * from './dope';
@@ -7,4 +8,5 @@ export * from './range';
 export * from './series';
 export * from './session-edit';
 export * from './setup';
+export * from './solver';
 export * from './stats';

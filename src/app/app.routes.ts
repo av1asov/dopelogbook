@@ -1,6 +1,10 @@
+import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 import { AmmoEditPage } from './features/ammo/ammo-edit-page';
 import { AmmoPage } from './features/ammo/ammo-page';
+import { BallisticsState } from './features/ballistics/ballistics-state';
+import { CalcPage } from './features/ballistics/calc-page';
+import { MpbrPage } from './features/ballistics/mpbr-page';
 import { CardPage } from './features/card/card-page';
 import { JournalPage } from './features/journal/journal-page';
 import { SessionEditPage } from './features/journal/session-edit-page';
@@ -22,7 +26,17 @@ export const routes: Routes = [
   { path: 'journal/:id', component: SessionPage },
   { path: 'journal/:id/edit', component: SessionEditPage, data: noTabs },
   { path: 'range', component: RangePage },
-  { path: 'card', component: CardPage },
+  {
+    path: 'ballistics',
+    children: [
+      // The tab last looked at: the card on the range, the calculator at home.
+      { path: '', pathMatch: 'full', redirectTo: () => inject(BallisticsState).tab() },
+      { path: 'card', component: CardPage },
+      { path: 'calc', component: CalcPage },
+      { path: 'mpbr', component: MpbrPage },
+    ],
+  },
+  { path: 'card', redirectTo: 'ballistics/card' },
   {
     path: 'stats',
     loadComponent: () => import('./features/stats/stats-page').then((m) => m.StatsPage),

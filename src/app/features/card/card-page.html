@@ -1,20 +1,11 @@
 @if (data(); as card) {
   <div class="page">
-    <header class="head">
-      <div class="names">
-        <span class="rifle">{{ card.rifle.name }}</span>
-        <span class="ammo">{{ title() }}</span>
-        <span class="specs num">{{ specs() }}</span>
-      </div>
-      <button
-        type="button"
-        class="link"
-        aria-label="Выбрать патрон, прицел и опору"
-        (click)="sheetOpen.set(true)"
-      >
-        Связка ▾
-      </button>
-    </header>
+    <app-ballistics-head
+      [rifle]="card.rifle.name"
+      [combo]="title()"
+      [specs]="specs()"
+      (pick)="sheetOpen.set(true)"
+    />
 
     <div class="body">
       @if (rows().length) {

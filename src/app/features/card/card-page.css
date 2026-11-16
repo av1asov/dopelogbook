@@ -11,51 +11,6 @@
   flex-direction: column;
 }
 
-.head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 16px;
-  border-bottom: 3px solid var(--ink);
-}
-
-.names {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.rifle {
-  font-family: var(--f-display);
-  font-size: 24px;
-  font-weight: 800;
-}
-
-.ammo {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.specs {
-  color: var(--ink-2);
-  font-size: 13px;
-}
-
-.link {
-  flex: none;
-  min-height: 44px;
-  padding: 6px 10px;
-  border: 1.5px solid var(--ink);
-  border-radius: 6px;
-  background: var(--card-paper);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .body {
   display: flex;
   flex-direction: column;

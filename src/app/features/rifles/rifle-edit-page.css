@@ -134,3 +134,32 @@
   border-color: var(--bad);
   color: var(--bad);
 }
+
+.three {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 0.8fr);
+}
+
+.three .wide {
+  grid-column: 1 / -1;
+}
+
+.ammo-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.source {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.fit-link {
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pen);
+  font-size: 13px;
+  font-weight: 600;
+}

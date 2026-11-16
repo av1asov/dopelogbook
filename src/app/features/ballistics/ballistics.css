@@ -1,0 +1,154 @@
+/* Shared by the «Расчёт» and «MPBR» tabs; the card has its own sheet of the same look. */
+:host {
+  display: block;
+  min-height: 100%;
+  background: var(--card-paper);
+  color: var(--ink);
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 16px 16px;
+}
+
+.right {
+  text-align: right;
+}
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 4px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--ok);
+  vertical-align: middle;
+}
+
+.text-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pen);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.text-link.plain {
+  color: inherit;
+  text-decoration: none;
+}
+
+.text-link.current {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.text-link.left {
+  align-self: flex-start;
+  min-height: 36px;
+}
+
+.offer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--ok);
+  background: var(--sheet);
+  font-size: 14px;
+}
+
+.offer .btn-small {
+  align-self: center;
+  flex: none;
+}
+
+.hint-box {
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--ink);
+  background: var(--sheet);
+  font-size: 14px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.empty b {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.secondary {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--card-paper);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+
+.big {
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.check input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--ink);
+}

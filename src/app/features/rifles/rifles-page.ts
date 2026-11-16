@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import {
   ammoById,
   ammoName,
+  barrelText,
   combosOf,
   fmt,
   fmtSigned,
@@ -46,6 +47,7 @@ export class RiflesPage {
       };
       return {
         rifle,
+        barrel: barrelText(rifle),
         scopes: mountsOf(diary, rifle).map(({ mount, scope }) => ({
           id: scope.id,
           name: scope.name,

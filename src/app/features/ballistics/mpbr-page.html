@@ -1,0 +1,139 @@
+@if (state.setup(); as setup) {
+  <div class="page">
+    <app-ballistics-head
+      [rifle]="setup.rifle.name"
+      [combo]="state.title()"
+      [specs]="state.specs()"
+      (pick)="sheetOpen.set(true)"
+    />
+
+    <div class="body">
+      <div class="zone-row">
+        <span class="zone-label">Убойная зона</span>
+        <span class="zone-seg">
+          @for (zone of zones; track zone) {
+            <button
+              type="button"
+              [attr.aria-pressed]="state.zone() === zone"
+              (click)="pickZone(zone)"
+            >
+              {{ zone / 10 }} см
+            </button>
+          }
+          <button
+            type="button"
+            [attr.aria-pressed]="custom()"
+            (click)="editingZone.set(!editingZone())"
+          >
+            {{ custom() ? numText(state.zone() / 10) + ' см' : 'своя' }}
+          </button>
+        </span>
+      </div>
+      @if (editingZone()) {
+        <label class="field custom">
+          Диаметр зоны, см
+          <input
+            class="num"
+            inputmode="decimal"
+            [value]="custom() ? numText(state.zone() / 10) : ''"
+            (change)="setCustomZone($event)"
+          />
+        </label>
+      }
+
+      @if (state.input()) {
+        @if (selected(); as row) {
+          <app-mpbr-chart
+            [axis]="axis()"
+            [radius]="radius()"
+            [line]="row.line"
+            [points]="points()"
+            [ghostPoints]="ghost()"
+            [journal]="row.facts"
+          />
+
+          <div class="row titles">
+            <span>Ближн.</span>
+            <span>Дальн.</span>
+            <span>Макс. ≤ {{ fmt(radius() / 10, radius() % 10 ? 1 : 0) }} · м</span>
+            <span class="right">MPBR</span>
+          </div>
+          @for (r of rows(); track r.key) {
+            <button
+              type="button"
+              class="row data num"
+              [class.on]="r.key === row.key"
+              [attr.aria-pressed]="r.key === row.key"
+              (click)="select(r.key)"
+            >
+              <span class="near">
+                {{ fmt(r.line.near ?? 0, 0) }}
+                @if (r.tag) {
+                  <span class="tag" [class.dim]="r.tag === 'сейчас'">{{ r.tag }}</span>
+                }
+              </span>
+              <span>{{ r.line.far != null ? fmt(r.line.far, 0) : '—' }}</span>
+              <span [class.warn]="r.line.above">{{ peakText(r.line) }}</span>
+              <span class="mpbr right" [class.warn]="r.line.above">
+                @if (r.line.above; as above) {
+                  —
+                  <small>над зоной {{ fmt(above[0], 0) }}–{{ fmt(above[1], 0) }}</small>
+                } @else {
+                  {{ r.line.mpbr != null ? fmt(r.line.mpbr, 0) : '—' }}
+                  @if (r.fact != null) {
+                    <small class="fact">факт ≈{{ round5(r.fact) }}</small>
+                  }
+                }
+              </span>
+            </button>
+          }
+          <span class="legend">
+            <span>— расчёт</span>
+            @if (row.facts.length) {
+              <span class="ok">◆ журнал (±полщелчка)</span>
+            }
+            <span>касание строки — её траектория</span>
+          </span>
+
+          @if (journalHint() || practical()) {
+            <div class="hint-box">
+              @if (journalHint(); as hint) {
+                {{ hint }}
+                @if (state.fit()) {
+                  <button type="button" class="text-link" (click)="fitOpen.set(true)">
+                    Подобрать V₀ по журналу
+                  </button>
+                }
+                <br />
+              }
+              {{ practical() }}
+            </div>
+          }
+          @if (sightNote(); as note) {
+            <p class="foot warn">{{ note }}</p>
+          }
+        }
+      } @else {
+        <div class="empty">
+          <b>Для расчёта нужны БК и скорость</b>
+          <span>Укажите их в данных патрона и в связке на экране винтовки.</span>
+        </div>
+      }
+    </div>
+  </div>
+
+  @if (sheetOpen()) {
+    <app-card-sheet mode="calc" [data]="setup" (closed)="sheetOpen.set(false)" />
+  }
+
+  @if (fitOpen() && state.fit(); as fit) {
+    <app-velocity-fit-sheet
+      [fit]="fit"
+      [v0]="setup.v0"
+      (save)="state.saveFittedVelocity($event); fitOpen.set(false)"
+      (closed)="fitOpen.set(false)"
+    />
+  }
+} @else {
+  <app-ballistics-empty />
+}

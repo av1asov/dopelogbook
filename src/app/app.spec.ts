@@ -18,7 +18,7 @@ describe('App', () => {
     expect([...tabs].map((tab) => tab.textContent?.trim())).toEqual([
       'Журнал',
       'Рубеж',
-      'Карта',
+      'Баллистика',
       'Статистика',
       'Ещё',
     ]);
