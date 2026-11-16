@@ -4,7 +4,10 @@ import {
   ChartFact,
   chartLayout,
   ChartLayout,
+  factText,
+  heightAt,
   intersects,
+  journalVerdict,
   LABEL_FONT,
   placeLabels,
   textWidth,
@@ -28,16 +31,23 @@ const JOURNAL = [
 ];
 const CLICK = 0.1;
 
+/** The journal moved to the zero `angle`, with the curve of that zero (see MpbrPage). */
+function factsOn(input: BallisticInput, angle: number, zero: number): ChartFact[] {
+  const calc = profile(input, angle, 300);
+  return JOURNAL.map((p) => ({
+    d: p.d,
+    h: (-p.elev + (angle - zero) * 1000) * p.d,
+    spread: (CLICK / 2) * p.d,
+    calc: heightAt(calc, p.d),
+  }));
+}
+
 /** What the MPBR page hands the chart for a row (see MpbrPage). */
 function layoutFor(input: BallisticInput, result: MpbrResult, row: MpbrRow): ChartLayout {
   const ranges = result.rows.flatMap((r) => (!r.line.above && r.line.mpbr ? [r.line.mpbr] : []));
   const axis = Math.ceil((Math.max(...ranges) * 1.2) / 10) * 10;
   const zero = result.current!.angle;
-  const journal: ChartFact[] = JOURNAL.map((p) => ({
-    d: p.d,
-    h: (-p.elev + (row.line.angle - zero) * 1000) * p.d,
-    spread: (CLICK / 2) * p.d,
-  }));
+  const journal = factsOn(input, row.line.angle, zero);
   return chartLayout({
     axis,
     radius: result.radius,
@@ -127,5 +137,82 @@ describe('MPBR chart labels', () => {
   it('measures the labels at 11 px at least', () => {
     expect(LABEL_FONT).toBeGreaterThanOrEqual(11);
     expect(textWidth('MPBR 3–194')).toBeGreaterThan(50);
+  });
+
+  it('puts no numbers by the journal ◆, at any zone', () => {
+    for (const zone of [100, 150, 200]) {
+      const r = mpbr(IGLA_160, zone, CLICK);
+      for (const row of r.rows) {
+        const layout = layoutFor(IGLA_160, r, row);
+        expect(layout.labels.some((l) => l.text.includes('журнал'))).toBe(false);
+        expect(layout.facts.length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('the journal on the MPBR chart', () => {
+  const fact = (d: number, h: number, calc: number | null, spread = 10): ChartFact => ({
+    d,
+    h,
+    spread,
+    calc,
+  });
+
+  it('tells the shots and the curve on a tap of a ◆', () => {
+    expect(factText(fact(200, -60, -63))).toBe(
+      '200 м · ваши выстрелы: 6 см ниже точки прицеливания · расчёт: 6,3 см',
+    );
+    expect(factText(fact(100, 12, -4))).toBe(
+      '100 м · ваши выстрелы: 1,2 см выше точки прицеливания · расчёт: 0,4 см ниже',
+    );
+    expect(factText(fact(400, -300, null))).toBe(
+      '400 м · ваши выстрелы: 30 см ниже точки прицеливания',
+    );
+  });
+
+  it('says the shots agree when every ◆ is within its whisker of the curve', () => {
+    expect(journalVerdict([fact(100, 2, 0), fact(200, -60, -55)], 240)).toEqual({
+      tone: 'ok',
+      text: '◆ ваши выстрелы совпали с расчётом на 100 и 200 м ✓',
+    });
+  });
+
+  it('names the widest miss and what it does to the range', () => {
+    expect(journalVerdict([fact(100, 2, 0), fact(200, -60, -30)], 240)).toEqual({
+      tone: 'miss',
+      text: '◆ на 200 м ваши выстрелы на 3 см ниже расчёта — MPBR по расчёту завышен',
+    });
+    expect(journalVerdict([fact(150, 40, 0)], 240).text).toBe(
+      '◆ на 150 м ваши выстрелы на 4 см выше расчёта — MPBR по расчёту занижен',
+    );
+  });
+
+  it('checks the MPBR only by the ◆ up to it + 20 %: farther out is for «Расчёт»', () => {
+    const far = fact(600, 900, -1200);
+    expect(journalVerdict([fact(100, 2, 0), far], 240).text).toBe(
+      '◆ ваши выстрелы совпали с расчётом на 100 м ✓',
+    );
+  });
+
+  it('is there with nothing to check by, in grey', () => {
+    const none = {
+      tone: 'none',
+      text: '◆ ваших выстрелов на этих дистанциях нет — проверить расчёт нечем',
+    };
+    expect(journalVerdict([], 240)).toEqual(none);
+    expect(journalVerdict([fact(300, -160, -150)], 240)).toEqual(none);
+  });
+
+  it('checks the owner’s Igla 160 at 100, 150 and 200 m on the best row of every zone', () => {
+    for (const zone of [100, 150, 200]) {
+      const r = mpbr(IGLA_160, zone, CLICK);
+      const row = r.rows.find((x) => x.clicks === r.best)!;
+      const facts = factsOn(IGLA_160, row.line.angle, r.current!.angle);
+      const verdict = journalVerdict(facts, row.line.mpbr! * 1.2);
+      expect(verdict.tone).not.toBe('none');
+      // 300 m is past every one of these ranges.
+      expect(verdict.text).not.toContain('300');
+    }
   });
 });

@@ -152,3 +152,16 @@
 .ok {
   color: var(--ok);
 }
+
+/* One line about the journal under the chart: green, orange, or grey with nothing to check by. */
+.verdict {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.verdict.none {
+  color: var(--ink-2);
+  font-weight: 400;
+}

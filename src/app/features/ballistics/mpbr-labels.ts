@@ -24,6 +24,74 @@ export interface ChartFact {
   h: number;
   /** Half the whisker, mm. */
   spread: number;
+  /** The calculated curve of the same zero at `d`, mm; null past it. */
+  calc: number | null;
+}
+
+/** Height of the profile at `d`, between its points; null outside it. */
+export function heightAt(points: readonly ChartPoint[], d: number): number | null {
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (d >= a.d && d <= b.d) return a.h + ((b.h - a.h) * (d - a.d)) / (b.d - a.d);
+  }
+  return null;
+}
+
+/** «6», «6,3»: cm from mm, a tenth where there is one. */
+export function cmText(mm: number): string {
+  const cm = Math.round(Math.abs(mm)) / 10;
+  return fmt(cm, Number.isInteger(cm) ? 0 : 1);
+}
+
+const side = (mm: number): string => (mm < 0 ? 'ниже' : 'выше');
+
+/** «200 м · ваши выстрелы: 6 см ниже точки прицеливания · расчёт: 6,3 см» on a tap of a ◆. */
+export function factText(f: ChartFact): string {
+  const shots = `${f.d} м · ваши выстрелы: ${cmText(f.h)} см ${side(f.h)} точки прицеливания`;
+  if (f.calc == null) return shots;
+  // The side is said once when both agree on it.
+  const calc = `${cmText(f.calc)} см${side(f.calc) === side(f.h) ? '' : ` ${side(f.calc)}`}`;
+  return `${shots} · расчёт: ${calc}`;
+}
+
+const listText = (ds: readonly number[]): string =>
+  ds.length > 1 ? `${ds.slice(0, -1).join(', ')} и ${ds[ds.length - 1]}` : `${ds[0]}`;
+
+export interface Verdict {
+  /** ok: green, miss: orange, none: grey. */
+  tone: 'ok' | 'miss' | 'none';
+  text: string;
+}
+
+/**
+ * The line under the chart, always there and always in one form: does the journal confirm this
+ * MPBR? Only the ◆ up to `reach` count (the chosen row's MPBR + 20 %): misses farther out are
+ * for «Расчёт». «◆ ваши выстрелы совпали с расчётом на 100 и 200 м ✓» when every ◆ is within
+ * its whisker of the curve, else the widest miss.
+ */
+export function journalVerdict(facts: readonly ChartFact[], reach: number): Verdict {
+  const known = facts.filter((f) => f.calc != null && f.d <= reach);
+  if (!known.length) {
+    return {
+      tone: 'none',
+      text: '◆ ваших выстрелов на этих дистанциях нет — проверить расчёт нечем',
+    };
+  }
+  const misses = known.map((f) => ({ f, miss: f.h - (f.calc as number) }));
+  if (misses.every(({ f, miss }) => Math.abs(miss) <= f.spread)) {
+    return {
+      tone: 'ok',
+      text: `◆ ваши выстрелы совпали с расчётом на ${listText(known.map((f) => f.d))} м ✓`,
+    };
+  }
+  const worst = misses.reduce((a, b) => (Math.abs(b.miss) > Math.abs(a.miss) ? b : a));
+  // Lower than the curve: the bullet leaves the zone sooner than calculated.
+  const verdict = worst.miss < 0 ? 'завышен' : 'занижен';
+  return {
+    tone: 'miss',
+    text: `◆ на ${worst.f.d} м ваши выстрелы на ${cmText(worst.miss)} см ${side(worst.miss)} расчёта — MPBR по расчёту ${verdict}`,
+  };
 }
 
 /** The chart's box, in SVG units: one unit is one CSS pixel on a 393 pt wide phone. */
@@ -79,7 +147,7 @@ export function textWidth(text: string, font = LABEL_FONT): number {
   return Math.ceil(em * font);
 }
 
-export type LabelKind = 'mpbr' | 'peak' | 'far' | 'near' | 'fact' | 'ghost';
+export type LabelKind = 'mpbr' | 'peak' | 'far' | 'near' | 'ghost';
 
 /** What a label is about: the point it belongs to and the marker drawn there. */
 export interface LabelSpec {
@@ -149,7 +217,7 @@ const crossesCurve = (r: Rect, curve: readonly { x: number; y: number }[]): bool
 
 /**
  * Spec 4в: each label tries above / below / right / left of its point, in the order given (the
- * priority), and takes the first spot clear of the labels already placed, of every marker and of
+ * priority: MPBR, the peak, the far and the near zero, «сейчас»), and takes the first spot clear of the labels already placed, of every marker and of
  * the edge. A spot clear of the curves too wins over one that is not; a label with no spot at all
  * is left out — its value is in the table and the hint.
  */
@@ -194,6 +262,8 @@ export interface FactMark {
   y: number;
   top: number;
   bottom: number;
+  /** Shown on a tap of the ◆. */
+  text: string;
 }
 
 export interface ChartLayout {
@@ -277,12 +347,11 @@ export function chartLayout(c: ChartInput): ChartLayout {
       y: clampY(c, f.h),
       top: clampY(c, f.h + f.spread),
       bottom: clampY(c, f.h - f.spread),
+      text: factText(f),
     };
     facts.push(mark);
+    // No numbers by the ◆: a tap on it tells them (spec 4в).
     whiskers.push({ x: mark.x - 1, y: mark.top, w: 2, h: mark.bottom - mark.top });
-    if (Math.abs(f.h) > c.radius) {
-      specs.push({ kind: 'fact', text: `журнал ${fmtSigned(f.h / 10, 1)}`, ...mark, r: FACT_R });
-    }
   }
 
   const [ghost, ...more] = c.ghost ? ghostAnchors(c, c.ghost, c.points) : [];
