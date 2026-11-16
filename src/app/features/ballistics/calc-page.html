@@ -87,16 +87,16 @@
         </p>
       </section>
 
-      @if (state.input()) {
-        @if (offer(); as kind) {
-          <div class="offer">
-            <span>{{ offerText() }}</span>
-            <button type="button" class="btn-small" (click)="acceptFit()">
-              {{ kind === 'accept' ? 'Принять' : 'Обновить' }}
-            </button>
-          </div>
-        }
+      @if (offer(); as kind) {
+        <div class="offer">
+          <span>{{ offerText() }}</span>
+          <button type="button" class="btn-small" (click)="acceptFit()">
+            {{ kind === 'accept' ? 'Принять' : 'Обновить' }}
+          </button>
+        </div>
+      }
 
+      @if (state.input()) {
         <div class="table" [class.extra]="state.extra()">
           <div class="row titles">
             <span>м</span>

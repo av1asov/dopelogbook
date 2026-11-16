@@ -101,10 +101,15 @@ type FitBase = Omit<BallisticInput, 'v0' | 'atmosphere' | 'zeroAtmosphere' | 'wi
 
 /** Calculated corrections, mrad, for each point at speed `v0`; one flight per day's weather. */
 function predict(base: FitBase, points: readonly FitPoint[], v0: number): (number | null)[] {
-  const groups = new Map<Atmosphere, number[]>();
-  points.forEach((p, i) => groups.set(p.atmosphere, [...(groups.get(p.atmosphere) ?? []), i]));
+  // Keyed by value: every series carries its own copy of its day's air.
+  const groups = new Map<string, number[]>();
+  points.forEach((p, i) => {
+    const key = `${p.atmosphere.temp}|${p.atmosphere.pressure}|${p.atmosphere.humidity}`;
+    groups.set(key, [...(groups.get(key) ?? []), i]);
+  });
   const out = new Array<number | null>(points.length).fill(null);
-  for (const [atmosphere, indexes] of groups) {
+  for (const indexes of groups.values()) {
+    const { atmosphere } = points[indexes[0]];
     const dists = [...new Set(indexes.map((i) => points[i].d))].sort((a, b) => a - b);
     const rows = solve({ ...base, v0, atmosphere }, dists);
     for (const i of indexes) out[i] = rows.find((r) => r.d === points[i].d)?.elev ?? null;

@@ -8,6 +8,7 @@ import {
   fmtSigned,
   hpaToMmHg,
   journalPoints,
+  mmHgToHpa,
   numText,
   parseNum,
   solve,
@@ -106,10 +107,12 @@ export class CalcPage {
     const input = this.state.input();
     if (!input) return null;
     const all = solve(input, distances(this.state.step(), TABLE_RANGE));
+    // Cut where a supersonic bullet goes subsonic; a subsonic load keeps all its rows.
     const subsonic = all.findIndex((r) => r.mach < 1);
+    const cut = subsonic > 0;
     return {
-      rows: subsonic < 0 ? all : all.slice(0, subsonic),
-      subsonicAt: subsonic < 0 ? null : all[subsonic].d,
+      rows: cut ? all.slice(0, subsonic) : all,
+      subsonicAt: cut ? all[subsonic].d : null,
     };
   });
 
@@ -204,18 +207,18 @@ export class CalcPage {
   }
 
   protected setPressure(event: Event): void {
-    const value = parseNum((event.target as HTMLInputElement).value);
-    if (value == null) return;
-    switch (this.state.pressureUnit()) {
-      case 'mmHg':
-        if (value > 400 && value < 900) this.state.update({ pressure: value * 1.333224 });
-        break;
-      case 'hPa':
-        if (value > 500 && value < 1200) this.state.update({ pressure: value });
-        break;
-      case 'alt':
-        if (value > -500 && value < 6000) this.state.update({ altitude: value });
-        break;
+    const field = event.target as HTMLInputElement;
+    const value = parseNum(field.value);
+    const unit = this.state.pressureUnit();
+    if (value != null && unit === 'mmHg' && value > 400 && value < 900) {
+      this.state.update({ pressure: mmHgToHpa(value) });
+    } else if (value != null && unit === 'hPa' && value > 500 && value < 1200) {
+      this.state.update({ pressure: value });
+    } else if (value != null && unit === 'alt' && value > -500 && value < 6000) {
+      this.state.update({ altitude: value });
+    } else {
+      // Rejected: show what the table is calculated with, not the typed text.
+      field.value = this.pressureText();
     }
   }
 

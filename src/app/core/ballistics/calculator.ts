@@ -1,6 +1,6 @@
 import { ammoById, comboOf, mountsOf, scopeById, sessionsOf } from './diary';
 import { afterZero, zeroInfo, ZeroInfo } from './dope';
-import { shortDate } from './format';
+import { numText, shortDate } from './format';
 import { Ammo, Combo, Diary, Rifle, Scope, Session, VelocitySource } from './model';
 import { clickOf, elevEff, isStable, seriesMatches, seriesStatus, toMrad, unitsOf } from './series';
 import {
@@ -46,11 +46,22 @@ export function barrelOf(rifle: Rifle | null | undefined): BarrelInfo {
   const twist =
     text.match(/1\s*[:/]\s*(\d+(?:[.,]\d+)?)/)?.[1] ??
     text.match(/(\d+(?:[.,]\d+)?)\s*(?:["″]|твист|дюйм)/i)?.[1];
+  // A null field was cleared on purpose: the text is read only where the field never was set.
   return {
-    length: rifle?.barrelLength ?? (length ? num(length) : null),
-    twist: rifle?.twist ?? (twist ? num(twist) : null),
+    length: rifle?.barrelLength !== undefined ? rifle.barrelLength : length ? num(length) : null,
+    twist: rifle?.twist !== undefined ? rifle.twist : twist ? num(twist) : null,
     dir: rifle?.twistDir ?? 'R',
   };
+}
+
+/** «560 мм · 1:10″ L», or the old free text when nothing could be read from it. */
+export function barrelText(rifle: Rifle | null | undefined): string {
+  const { length, twist, dir } = barrelOf(rifle);
+  const parts = [
+    length ? `${numText(length)} мм` : '',
+    twist ? `1:${numText(twist)}″${dir === 'L' ? ' L' : ''}` : '',
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : (rifle?.barrel ?? '');
 }
 
 /** Bullet diameters of common calibres, mm, matched against the start of the name. */
@@ -296,7 +307,9 @@ export function journalVelocity(d: Diary, setup: CalcSetup, device = '*'): Veloc
     spin: base?.spin ?? null,
   };
   const click = toMrad(clickOf(scope), unitsOf(scope));
-  return fitVelocity(fitBase, points, click, setup.v0?.value ?? 800);
+  const fit = fitVelocity(fitBase, points, click, setup.v0?.value ?? 800);
+  // No sensitivity to V₀ (the zero is out of reach): nothing worth showing.
+  return fit && isFinite(fit.error) ? fit : null;
 }
 
 /** What the fit offers: a new speed, an update, or nothing worth showing. */

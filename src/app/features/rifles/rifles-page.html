@@ -28,8 +28,8 @@
             не добавлены
           }
         </span>
-        @if (card.rifle.barrel) {
-          <span class="muted">Ствол</span><span>{{ card.rifle.barrel }}</span>
+        @if (card.barrel) {
+          <span class="muted">Ствол</span><span>{{ card.barrel }}</span>
         }
         @if (card.rifle.devices?.length) {
           <span class="muted">Дульные</span><span>{{ card.rifle.devices?.join(', ') }}</span>

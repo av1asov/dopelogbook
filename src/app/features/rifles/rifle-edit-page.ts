@@ -48,10 +48,11 @@ type ComboForm = FormGroup<{
   saved: FormControl<string>;
 }>;
 
-/** «10» → right-hand 1:10″; «10 L» → left-hand. */
+/** «10» or «1:10» → right-hand 1:10″; «10 L» → left-hand. */
 function parseTwist(text: string): { twist: number | null; dir: 'R' | 'L' } {
   const left = /[lл]/i.test(text);
-  return { twist: parseNum(text.replace(/[^\d.,]/g, '')), dir: left ? 'L' : 'R' };
+  const turns = text.replace(/^\s*1\s*[:/]/, '').match(/\d+(?:[.,]\d+)?/)?.[0];
+  return { twist: parseNum(turns), dir: left ? 'L' : 'R' };
 }
 type MountForm = FormGroup<{
   scopeId: FormControl<string>;
@@ -103,7 +104,7 @@ export class RifleEditPage implements OnInit {
     const out: Record<string, VelocityFit> = {};
     for (const combo of rifle.combos) {
       const fit = journalVelocity(diary, calcSetup(diary, rifle, scope?.id, combo.ammoId));
-      if (fit && isFinite(fit.error)) out[combo.ammoId] = fit;
+      if (fit) out[combo.ammoId] = fit;
     }
     return out;
   });
@@ -329,15 +330,15 @@ export class RifleEditPage implements OnInit {
     }
     const existing = this.existing();
     const twist = parseTwist(value.twist);
-    return this.store.save(
-      'rifle',
-      compact({
+    const barrelLength = parseNum(value.barrelLength);
+    return this.store.save('rifle', {
+      ...compact({
         id: existing?.id,
         createdAt: existing?.createdAt,
         name,
         caliber: value.caliber.trim(),
         barrel: existing?.barrel,
-        barrelLength: parseNum(value.barrelLength),
+        barrelLength,
         twist: twist.twist,
         twistDir: twist.twist && twist.dir === 'L' ? 'L' : undefined,
         notes: value.notes.trim(),
@@ -361,6 +362,8 @@ export class RifleEditPage implements OnInit {
           }),
         ),
       }),
-    );
+      // An explicit null keeps a cleared field from being read again from the old free text.
+      ...(existing?.barrel ? { barrelLength, twist: twist.twist } : {}),
+    });
   }
 }
