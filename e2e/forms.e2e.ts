@@ -34,6 +34,7 @@ test('Пристрелка', async ({ page }) => {
   await page.getByRole('checkbox', { name: 'Начать с пристрелки' }).check();
   await page.getByRole('button', { name: 'На рубеж' }).click();
   await expect(page.getByText('Режим пристрелки')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Выстрелов' })).toBeVisible();
   await expectTidyFields(page, 'Пристрелка');
 });
 

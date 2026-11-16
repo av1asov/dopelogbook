@@ -156,6 +156,8 @@ export class RangeSession implements OnInit {
   /** A new shot being marked up; it reaches the store only when applied or kept. */
   protected readonly measuring = signal<{ id: string; shot: Blob } | null>(null);
   protected readonly cameraHint = signal(false);
+  /** The draft or the defaults are in the form; until then there is nothing to type into. */
+  protected readonly ready = signal(false);
   protected readonly photoBusy = signal(false);
   protected readonly error = signal<string | null>(null);
   /** A write to the database failed; the banner offers to try it again. */
@@ -384,8 +386,12 @@ export class RangeSession implements OnInit {
       });
 
     this.destroyRef.onDestroy(() => clearTimeout(this.toastTimer));
-    this.cameraHint.set(!(await this.settings.readSetting<boolean>(CAMERA_HINT)));
-    const draft = await this.settings.readSetting<RangeDraft>(DRAFT);
+    const [hintSeen, draft] = await Promise.all([
+      this.settings.readSetting<boolean>(CAMERA_HINT),
+      this.settings.readSetting<RangeDraft>(DRAFT),
+      // Unreadable storage starts from the defaults rather than leaving no form at all.
+    ]).catch(() => [undefined, undefined] as const);
+    this.cameraHint.set(!hintSeen);
     if (draft?.sessionId === this.session().id) {
       const defaults = this.defaultsFor(this.session());
       this.form.patchValue(draft.value);
@@ -401,6 +407,7 @@ export class RangeSession implements OnInit {
     this.form.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => void this.storeDraft());
+    this.ready.set(true);
     void this.remindBackup();
   }
 
