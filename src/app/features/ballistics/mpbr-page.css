@@ -44,11 +44,13 @@
 
 .row {
   display: grid;
-  grid-template-columns: 0.9fr 0.9fr 1.4fr 1.2fr;
+  grid-template-columns: 0.8fr 0.9fr 0.75fr 1.55fr 1.1fr;
+  gap: 0 4px;
   align-items: baseline;
 }
 
 .titles {
+  align-items: end;
   padding: 4px 0;
   border-bottom: 1.5px solid var(--ink);
   color: var(--ink-2);
@@ -77,8 +79,16 @@
   color: var(--mark-ink);
 }
 
-.near {
+/* «↑5» with its tags under it: «сейчас» and «опт.» can both be on the same row. */
+.clicks {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   font-weight: 800;
+}
+
+.peak {
   white-space: nowrap;
 }
 
@@ -109,7 +119,7 @@
 }
 
 .mpbr small {
-  white-space: nowrap;
+  text-align: right;
   font-family: var(--f-body);
   font-size: 12px;
   font-weight: 700;

@@ -10,30 +10,31 @@ import {
   untracked,
 } from '@angular/core';
 import { fmt, fmtSigned, MpbrLine } from '../../core/ballistics';
+import {
+  CHART,
+  ChartFact,
+  chartLayout,
+  ChartPoint,
+  clampY,
+  entryText,
+  LabelKind,
+  xOf,
+  yOf,
+} from './mpbr-labels';
 
-/** Heights over the line of sight, mm. */
-export interface ChartPoint {
-  d: number;
-  h: number;
-}
+export type { ChartFact, ChartPoint } from './mpbr-labels';
 
-/** A journal measurement moved to the chosen zero: where the bullet really went. */
-export interface ChartFact {
-  d: number;
-  h: number;
-  /** Half the whisker, mm. */
-  spread: number;
-}
-
-const W = 361;
-const LEFT = 24;
-const RIGHT = 349;
-const MID = 70;
-const TOP = 8;
-const BOTTOM = 132;
-/** The zone is always drawn this many pixels from the line to its edge. */
-const ZONE_PX = 26;
+const { W, LEFT, RIGHT, MID, TOP, BOTTOM, ZONE_PX } = CHART;
 const TWEEN_MS = 200;
+
+const LABEL_CLASS: Record<LabelKind, string> = {
+  mpbr: 'mark hot-text',
+  peak: 'mark hot-text',
+  far: 'mark',
+  near: 'mark',
+  fact: 'mark fact-text',
+  ghost: 'mark ghost-text',
+};
 
 /** The trajectory against the kill zone, with the marks of the chosen zero. */
 @Component({
@@ -74,65 +75,34 @@ const TWEEN_MS = 200;
           <path class="over" [attr.d]="over" />
         }
       </g>
-      @for (p of crossings(); track $index) {
-        <circle class="cross" [attr.cx]="x(p.d)" [attr.cy]="MID" r="3.5" />
-        <text
-          class="mark"
-          [attr.x]="x(p.d)"
-          [attr.y]="p.below ? MID + 16 : MID - 8"
-          text-anchor="middle"
-        >
-          {{ p.text }}
-        </text>
+      @for (p of layout().crossings; track $index) {
+        <circle class="cross" [attr.cx]="p.x" [attr.cy]="p.y" [attr.r]="p.r" />
       }
-      @if (peak(); as p) {
-        <circle class="hot" [attr.cx]="x(p.d)" [attr.cy]="clampY(p.h)" r="4.5" />
-        <text
-          class="mark hot-text"
-          [attr.x]="x(p.d)"
-          [attr.y]="clampY(p.h) - 9"
-          text-anchor="middle"
-        >
-          {{ p.text }}
-        </text>
+      @if (layout().peak; as p) {
+        <circle class="hot" [attr.cx]="p.x" [attr.cy]="p.y" [attr.r]="p.r" />
       }
-      @if (exit(); as e) {
-        <circle class="hot" [attr.cx]="x(e.d)" [attr.cy]="y(-radius())" r="4.5" />
-        <text
-          class="mark hot-text"
-          [attr.x]="x(e.d) + (e.d > axis() * 0.75 ? -6 : 6)"
-          [attr.y]="y(-radius()) + 15"
-          [attr.text-anchor]="e.d > axis() * 0.75 ? 'end' : 'start'"
-        >
-          {{ e.text }}
-        </text>
+      @if (layout().exit; as e) {
+        <circle class="hot" [attr.cx]="e.x" [attr.cy]="e.y" [attr.r]="e.r" />
       }
-      @for (f of facts(); track f.d) {
+      @for (f of layout().facts; track f.d) {
         <line
           class="whisker"
-          [attr.x1]="x(f.d)"
-          [attr.y1]="clampY(f.h + f.spread)"
-          [attr.x2]="x(f.d)"
-          [attr.y2]="clampY(f.h - f.spread)"
+          [attr.x1]="f.x"
+          [attr.y1]="f.top"
+          [attr.x2]="f.x"
+          [attr.y2]="f.bottom"
         />
         <rect
           class="fact"
-          [attr.x]="x(f.d) - 4"
-          [attr.y]="clampY(f.h) - 4"
+          [attr.x]="f.x - 4"
+          [attr.y]="f.y - 4"
           width="8"
           height="8"
-          [attr.transform]="'rotate(45 ' + x(f.d) + ' ' + clampY(f.h) + ')'"
+          [attr.transform]="'rotate(45 ' + f.x + ' ' + f.y + ')'"
         />
-        @if (f.outside) {
-          <text
-            class="fact-text"
-            [attr.x]="x(f.d) - 9"
-            [attr.y]="clampY(f.h) + 12"
-            text-anchor="end"
-          >
-            журнал {{ f.text }}
-          </text>
-        }
+      }
+      @for (l of layout().labels; track l.kind + l.x) {
+        <text [attr.class]="labelClass[l.kind]" [attr.x]="l.tx" [attr.y]="l.ty">{{ l.text }}</text>
       }
     </svg>
   `,
@@ -197,11 +167,16 @@ const TWEEN_MS = 200;
       fill: var(--warn);
     }
 
+    /* A halo the colour of the card keeps a label readable where a line runs under it. */
     .mark {
       fill: var(--ink);
       font-family: var(--f-body);
       font-size: 11px;
       font-weight: 700;
+      paint-order: stroke;
+      stroke: var(--card-paper);
+      stroke-width: 3px;
+      stroke-linejoin: round;
     }
 
     .hot-text {
@@ -221,9 +196,10 @@ const TWEEN_MS = 200;
 
     .fact-text {
       fill: var(--ok);
-      font-family: var(--f-body);
-      font-size: 10px;
-      font-weight: 700;
+    }
+
+    .ghost-text {
+      fill: var(--ink-2);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -235,7 +211,7 @@ export class MpbrChart {
   readonly radius = input.required<number>();
   readonly line = input.required<MpbrLine>();
   readonly points = input.required<ChartPoint[]>();
-  /** The optimal zero, dashed, when another one is chosen. */
+  /** The zero now, dashed, when another row is chosen. */
   readonly ghostPoints = input<ChartPoint[] | null>(null);
   readonly journal = input<ChartFact[]>([]);
 
@@ -246,6 +222,7 @@ export class MpbrChart {
   protected readonly BOTTOM = BOTTOM;
   protected readonly MID = MID;
   protected readonly ZONE_PX = ZONE_PX;
+  protected readonly labelClass = LABEL_CLASS;
 
   /** What is drawn now: follows `points` over 200 ms. */
   private readonly shown = signal<ChartPoint[]>([]);
@@ -274,15 +251,15 @@ export class MpbrChart {
   }
 
   protected x(d: number): number {
-    return LEFT + ((RIGHT - LEFT) * d) / this.axis();
+    return xOf({ axis: this.axis(), radius: this.radius() }, d);
   }
 
   protected y(h: number): number {
-    return MID - (h * ZONE_PX) / this.radius();
+    return yOf({ axis: this.axis(), radius: this.radius() }, h);
   }
 
   protected clampY(h: number): number {
-    return Math.min(BOTTOM, Math.max(TOP, this.y(h)));
+    return clampY({ axis: this.axis(), radius: this.radius() }, h);
   }
 
   protected cm(mm: number): string {
@@ -317,47 +294,26 @@ export class MpbrChart {
     return over.length > 1 ? this.pathOf(over) : null;
   });
 
-  protected readonly crossings = computed(() => {
-    const { near, far } = this.line();
-    return [near, far].flatMap((d, i) =>
-      d != null && d <= this.axis() ? [{ d, text: fmt(d, 0), below: i === 0 }] : [],
-    );
-  });
-
-  protected readonly peak = computed(() => {
-    const { peak, above } = this.line();
-    if (peak.d <= 0) return null;
-    const text = above
-      ? `над зоной ${fmt(above[0], 0)}–${fmt(above[1], 0)}`
-      : `${fmtSigned(peak.h / 10, 1)} на ${fmt(peak.d, 0)}`;
-    return { d: peak.d, h: peak.h, text };
-  });
-
-  protected readonly exit = computed(() => {
-    const { mpbr, above } = this.line();
-    return mpbr != null && mpbr <= this.axis() && !above
-      ? { d: mpbr, text: `MPBR ${fmt(mpbr, 0)}` }
-      : null;
-  });
-
-  protected readonly facts = computed(() => {
-    const r = this.radius();
-    return this.journal()
-      .filter((f) => f.d <= this.axis())
-      .map((f) => ({
-        ...f,
-        outside: Math.abs(f.h) > r,
-        text: fmtSigned(f.h / 10, 1),
-      }));
-  });
+  /** Marks and labels for where the curve is going, not where the transition is now. */
+  protected readonly layout = computed(() =>
+    chartLayout({
+      axis: this.axis(),
+      radius: this.radius(),
+      line: this.line(),
+      points: this.points(),
+      ghost: this.ghostPoints(),
+      journal: this.journal(),
+    }),
+  );
 
   protected readonly label = computed(() => {
-    const { near, far, peak, mpbr } = this.line();
+    const { near, far, peak, mpbr, entry } = this.line();
     return [
       'Траектория',
       near != null ? `пересекает линию прицеливания на ${fmt(near, 0)}` : '',
       far != null ? `и ${fmt(far, 0)} м` : '',
       `максимум ${fmtSigned(peak.h / 10, 1)} см на ${fmt(peak.d, 0)} м`,
+      entry != null ? `входит в зону на ${entryText(entry)} м` : '',
       mpbr != null ? `выходит из зоны на ${fmt(mpbr, 0)} м` : '',
     ]
       .filter(Boolean)

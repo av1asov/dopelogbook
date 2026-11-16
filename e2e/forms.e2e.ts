@@ -124,6 +124,8 @@ test('Баллистика · расчёт', async ({ page }) => {
   await page.goto('/ballistics/calc');
   await expect(page.getByRole('tab', { name: 'Расчёт' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.row.data').first()).toBeVisible();
+  await page.getByLabel('Дистанция, м').fill('237');
+  await expect(page.locator('.shot-elev')).toContainText('↑');
   await expectTidyFields(page, 'Баллистика · расчёт');
   await page.getByRole('button', { name: 'ещё условия' }).click();
   await page.getByRole('checkbox', { name: /Кориолис/ }).check();
@@ -137,7 +139,17 @@ test('Баллистика · MPBR', async ({ page }) => {
   await page.goto('/ballistics/mpbr');
   await page.getByRole('button', { name: 'своя' }).click();
   await expect(page.getByRole('button', { name: /опт\./ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.getByText(/Как пристрелять: на 100 м поднять прицел на \d+ щелч/),
+  ).toBeVisible();
   await expectTidyFields(page, 'Баллистика · MPBR');
+  // A sight of 45 mm over a zone of 8 cm: the range starts a few metres out.
+  await page.getByLabel('Диаметр зоны, см').fill('8');
+  await page.getByLabel('Диаметр зоны, см').press('Enter');
+  await expect(page.getByText(/^\* MPBR от \d+(–\d+)? м: прицел выше половины зоны/)).toBeVisible();
+  await expect(
+    page.getByText(/Ближний ноль — \d+ м \(точность низкая\), дальний — \d+ м\. MPBR \d+–\d+ м\./),
+  ).toBeVisible();
 });
 
 test('Винтовка · ствол', async ({ page }) => {
