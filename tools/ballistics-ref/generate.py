@@ -85,7 +85,7 @@ def run(case, atmosphere):
             {
                 "d": d,
                 # Below the line of sight is negative there; the app dials up positive.
-                "elev": round(-angle(drop, Unit.MRad), 4),
+                "elev": round(-angle(drop, Unit.MRad), 4) + 0.0,
                 "wind": round(abs(angle(windage, Unit.MRad)), 4),
                 "v": round(float(p.velocity >> Unit.MPS), 2),
                 "time": round(float(p.time), 5),
@@ -107,7 +107,7 @@ def main():
         for case in CASES
         for atmosphere in ATMOSPHERES
     ]
-    print(json.dumps({"generator": f"py-ballisticcalc {version('py-ballisticcalc')}", "cases": cases}, indent=1))
+    print(json.dumps({"generator": f"py-ballisticcalc {version('py-ballisticcalc')}", "cases": cases}, indent=2))
 
 
 if __name__ == "__main__":
